@@ -2,7 +2,7 @@
 
 > English | [简体中文](README.md)
 
-Version: v0.0.5
+Version: v0.0.5-2
 
 **A lightweight, clean, visualized, native SSH / SFTP-driven self-hosted centralized SSH web gateway, powered by Go** — no Agent required on servers, safe and controllable.
 

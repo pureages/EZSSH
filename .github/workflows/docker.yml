@@ -1,7 +1,7 @@
 name: docker
 
 # 推送 v* 标签时构建多架构 Docker 镜像并推送到 Docker Hub
-# 用法: git tag v0.0.5 && git push origin v0.0.5
+# 用法: git tag v0.0.5-2 && git push origin v0.0.5-2
 #
 # 需要先配置 GitHub Secrets:
 #   DOCKERHUB_USERNAME   Docker Hub 用户名
