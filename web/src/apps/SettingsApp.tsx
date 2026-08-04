@@ -91,6 +91,14 @@ export function SettingsApp({ onTitle }: AppProps) {
 
   // 关于
   const [version, setVersion] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<{
+    latest: string
+    available: boolean
+    message: string
+    ok: boolean
+  } | null>(null)
 
   const pickBg = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -122,6 +130,41 @@ export function SettingsApp({ onTitle }: AppProps) {
     setBgPreview('')
     setBgOk(true)
     setBgMsg(t('已恢复默认背景'))
+  }
+
+  /** 检查 GitHub 最新版本 */
+  const checkUpdate = async () => {
+    setChecking(true)
+    setUpdateInfo(null)
+    try {
+      const r = await api.updateCheck()
+      if (r.update_available) {
+        setUpdateInfo({
+          latest: r.latest,
+          available: true,
+          message: t('发现新版本') + ` v${r.latest}`,
+          ok: true,
+        })
+      } else {
+        setUpdateInfo({ latest: r.latest, available: false, message: t('已是最新版本'), ok: true })
+      }
+    } catch (e) {
+      setUpdateInfo({ latest: '', available: false, message: transErr(e, t('检查更新失败')), ok: false })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  /** 一键更新并自动重启 */
+  const doUpdate = async () => {
+    setUpdating(true)
+    try {
+      const r = await api.update()
+      setUpdateInfo({ latest: r.version, available: false, message: t('更新成功，服务正在重启，请稍后刷新页面。'), ok: true })
+    } catch (e) {
+      setUpdateInfo({ latest: '', available: false, message: transErr(e, t('更新失败')), ok: false })
+      setUpdating(false)
+    }
   }
 
   /** 点击示例区域：打开系统取色器，修改该段监控文字颜色 */
@@ -644,6 +687,36 @@ export function SettingsApp({ onTitle }: AppProps) {
                   github.com/pureages/EZSSH ↗
                 </a>
               </div>
+            </div>
+
+            {/* 检查更新 */}
+            <div className="st-card">
+              <div className="st-card-title">{t('🔄 检查更新')}</div>
+              <div className="st-tip" style={{ marginBottom: 12 }}>
+                {t('检查 GitHub 上是否有新版本，发现新版本后可一键更新。')}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn" disabled={checking || updating} onClick={checkUpdate}>
+                  {checking ? t('正在检查更新') : t('检查更新')}
+                </button>
+                {updateInfo?.available && !updating && (
+                  <button className="btn" onClick={doUpdate} disabled={updating}>
+                    {t('一键更新') + ' → v' + updateInfo.latest}
+                  </button>
+                )}
+                {updating && <span className="st-tip">{t('更新中')}</span>}
+              </div>
+              {updateInfo && (
+                <div
+                  className="error-text"
+                  style={{
+                    marginTop: 10,
+                    color: updateInfo.ok ? (updateInfo.available ? 'var(--primary)' : 'var(--green)') : undefined,
+                  }}
+                >
+                  {updateInfo.message}
+                </div>
+              )}
             </div>
           </>
         )}

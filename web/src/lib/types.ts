@@ -43,6 +43,23 @@ export interface InitStatus {
   version: string
 }
 
+export interface UpdateCheckResult {
+  /** 当前运行版本（不含 v 前缀） */
+  current: string
+  /** GitHub 最新 Release 版本（不含 v 前缀） */
+  latest: string
+  /** 是否有可用更新 */
+  update_available: boolean
+  /** 最新 Release 页面地址 */
+  release_url: string
+}
+
+export interface UpdateResult {
+  ok: string
+  message: string
+  version: string
+}
+
 export interface MeInfo {
   username: string
   vaultUnlocked: boolean

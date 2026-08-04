@@ -92,6 +92,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.requireAuth(s.handleGetSettings))
 	mux.HandleFunc("PUT /api/settings", s.requireAuth(s.handleUpdateSettings))
 	mux.HandleFunc("POST /api/change-password", s.requireAuth(s.handleChangePassword))
+	mux.HandleFunc("GET /api/update-check", s.requireAuth(s.handleUpdateCheck))
+	mux.HandleFunc("POST /api/update", s.requireAuth(s.handleUpdate))
 
 	mux.HandleFunc("GET /api/hosts", s.requireAuth(s.handleListHosts))
 	mux.HandleFunc("POST /api/hosts", s.requireAuth(s.handleCreateHost))

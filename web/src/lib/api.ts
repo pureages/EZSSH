@@ -16,6 +16,8 @@ import type {
   NginxStatus,
   SavedCommand,
   SftpEntry,
+  UpdateCheckResult,
+  UpdateResult,
   Website,
   WebsiteInput,
 } from './types'
@@ -192,6 +194,12 @@ export const api = {
       body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     }),
   captcha: () => request<{ id: string; svg: string }>('/api/captcha'),
+
+  // ---- 更新 ----
+  /** 检查 GitHub 最新 Release 版本，与本地对比 */
+  updateCheck: () => request<UpdateCheckResult>('/api/update-check'),
+  /** 一键更新：下载最新发布包，替换二进制与前端并自动重启 */
+  update: () => request<UpdateResult>('/api/update', { method: 'POST' }),
 
   listHosts: () => request<Host[]>('/api/hosts'),
 

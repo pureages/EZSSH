@@ -79,6 +79,18 @@ export const enDict: Record<string, string> = {
   安全路由: 'Security Route',
   登录路由: 'Login Route',
   自定义登录路径: 'Custom Login Path',
+  检查更新: 'Check for Updates',
+  正在检查更新: 'Checking for updates…',
+  已是最新版本: 'You are up to date.',
+  发现新版本: 'New version available',
+  '当前版本: {0}': 'Current version: {0}',
+  '最新版本: {0}': 'Latest version: {0}',
+  一键更新: 'Update Now',
+  更新中: 'Updating…',
+  '更新成功，服务正在重启，请稍后刷新页面。': 'Update successful. The service is restarting. Please refresh shortly.',
+  检查更新失败: 'Failed to check for updates',
+  更新失败: 'Update failed',
+  '更新到 {0}': 'Update to {0}',
 
   // ===== 桌面 =====
   添加服务器: 'Add Server',
