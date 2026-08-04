@@ -22,7 +22,7 @@ RUN apk add --no-cache ca-certificates tzdata && addgroup -S ezssh && adduser -S
 WORKDIR /app
 COPY --from=go-builder /ezssh /app/ezssh
 COPY --from=web-builder /app/web/dist /app/web/dist
-RUN mkdir -p /data && chown -R ezssh:ezssh /app /data
+RUN mkdir -p /data /app/data && chown -R ezssh:ezssh /app /data
 USER ezssh
 ENV EZSSH_LISTEN=0.0.0.0 \
     EZSSH_PORT=49466 \
