@@ -2,9 +2,18 @@
 
 版本：v0.0.1
 
-**干净、高效、可视化的自托管中心化 SSH Web 网关**：仅依赖目标机的原生 SSH / SFTP 服务，无需在服务器上安装任何 Agent，也不开放额外端口，安全可控。
+**干净、高效、可视化的自托管中心化 SSH Web 网关，GO驱动**：仅依赖目标机的原生 SSH / SFTP 服务，无需在服务器上安装任何 Agent，也不开放额外端口，安全可控。
 
 如果你想要更详细的内容请查看[文档](doc/user-guide.html)
+
+## 预览
+
+<p align="center">
+  <img src="img/1.png" alt="EZSSH 预览 1" width="48%" />
+  <img src="img/2.png" alt="EZSSH 预览 2" width="48%" />
+  <br/>
+  <img src="img/3.png" alt="EZSSH 预览 3" width="48%" />
+</p>
 
 ## 快速开始
 
