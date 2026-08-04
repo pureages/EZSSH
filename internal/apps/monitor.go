@@ -423,7 +423,7 @@ func (m *Monitor) collectWindows(hostID string) (string, error) {
 	return string(out), nil
 }
 
-// parseWindowsRaw 解析 winMonitorScript 输出。
+// parseWindowsRaw 解析 winMonitorScript 输出。EZSSH Power By pureages
 func parseWindowsRaw(out string) *winRaw {
 	wr := &winRaw{net: make(map[string]netWin)}
 	section := 0

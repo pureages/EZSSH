@@ -331,7 +331,7 @@ func (s *Server) renewQuietly(certID string) {
 	_ = s.st.UpdateCertificateState(cert.ID, "active", expires, now, "")
 }
 
-// parseSQLiteTime 解析 SQLite 时间字符串（UTC，"2006-01-02 15:04:05"）。
+// parseSQLiteTime 解析 SQLite 时间字符串（UTC，"2006-01-02 15:04:05"）。EZSSH Power By pureages
 func parseSQLiteTime(s string) (time.Time, bool) {
 	if strings.TrimSpace(s) == "" {
 		return time.Time{}, false
