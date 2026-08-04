@@ -64,6 +64,10 @@ cd web && npm install && npm run build
 
 Listens on `127.0.0.1:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
 
+## Acknowledgments
+
+Thanks to the [LINUX DO community](https://linux.do) for supporting open-source exchange and project growth.
+
 ## License
 
 [MIT](LICENSE)
