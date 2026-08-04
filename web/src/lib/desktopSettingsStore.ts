@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PRESET_BGS, THEMES, DEFAULT_THEME } from './desktopPresets'
+import { THEMES, DEFAULT_THEME } from './desktopPresets'
 
 const HIDE_MONITOR_KEY = 'ezssh.hide_icon_monitor'
 const DESKTOP_BG_KEY = 'ezssh.desktop_bg'
@@ -7,8 +7,8 @@ const THEME_KEY = 'ezssh.theme'
 const ICON_SCALE_KEY = 'ezssh.icon_scale'
 const MON_FONT_KEY = 'ezssh.mon_font'
 const MON_COLORS_KEY = 'ezssh.mon_colors'
-/** 默认桌面背景：流光 */
-const DEFAULT_BG = PRESET_BGS.find((p) => p.id === 'flow')?.url ?? ''
+/** 默认桌面背景：空串 = 不使用图片，由 CSS 渐变渲染（柔和偏暗） */
+const DEFAULT_BG = ''
 /** 桌面图标缩放范围（1 = 100%，越小图标越小） */
 const MIN_ICON_SCALE = 0.6
 const MAX_ICON_SCALE = 1.5
@@ -84,8 +84,8 @@ interface DesktopSettingsState {
   resetBg: () => void
   /** 当前主题风格 id（flow / lucky / faraway） */
   theme: string
-  /** 切换主题：同时应用配套桌面背景；withBg=false 时仅换主题不换背景 */
-  setTheme: (id: string, withBg?: boolean) => void
+  /** 切换主题：仅切换整体配色，不影响桌面背景（背景与主题互相独立） */
+  setTheme: (id: string) => void
   /** 桌面图标缩放比例（1 = 100%） */
   iconScale: number
   setIconScale: (v: number) => void
@@ -103,7 +103,7 @@ const initialTheme = THEMES.some((t) => t.id === readLS(THEME_KEY)) ? readLS(THE
 applyTheme(initialTheme)
 
 /** 桌面设置：跨设置窗口与桌面共享，修改即时生效 */
-export const useDesktopSettings = create<DesktopSettingsState>((set, get) => ({
+export const useDesktopSettings = create<DesktopSettingsState>((set) => ({
   hideIconMonitor: readLS(HIDE_MONITOR_KEY) === '1',
   setHideIconMonitor: (v) => {
     writeLS(HIDE_MONITOR_KEY, v ? '1' : '0')
@@ -120,11 +120,6 @@ export const useDesktopSettings = create<DesktopSettingsState>((set, get) => ({
   setBg: (dataUrl) => {
     if (!writeLS(DESKTOP_BG_KEY, dataUrl)) return false
     set({ bg: dataUrl })
-    // 预制背景与主题风格绑定：选择预制背景时自动切换到对应主题
-    const preset = PRESET_BGS.find((p) => p.url === dataUrl)
-    if (preset && preset.theme !== get().theme) {
-      get().setTheme(preset.theme, false)
-    }
     return true
   },
   resetBg: () => {
@@ -132,16 +127,12 @@ export const useDesktopSettings = create<DesktopSettingsState>((set, get) => ({
     set({ bg: DEFAULT_BG })
   },
   theme: initialTheme,
-  setTheme: (id, withBg = true) => {
+  setTheme: (id) => {
     const t = THEMES.find((x) => x.id === id)
     if (!t) return
     writeLS(THEME_KEY, id)
     applyTheme(id)
     set({ theme: id })
-    if (withBg) {
-      writeLS(DESKTOP_BG_KEY, t.bg)
-      set({ bg: t.bg })
-    }
   },
   iconScale: (() => {
     const v = parseFloat(readLS(ICON_SCALE_KEY))

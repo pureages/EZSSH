@@ -381,10 +381,11 @@ body,
   position: relative;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(1100px 650px at 15% 10%, #1d4ed8 0%, transparent 55%),
-    radial-gradient(900px 600px at 88% 80%, #6d28d9 0%, transparent 50%),
-    radial-gradient(700px 500px at 75% 15%, #0e7490 0%, transparent 45%),
-    linear-gradient(165deg, #0b1020 0%, #111a2e 60%, #0b1020 100%);
+  /* 默认桌面背景：纯 CSS 渐变（柔和偏暗），不使用图片 */
+  background: radial-gradient(1200px 720px at 18% 8%, rgba(59, 130, 246, 0.1) 0%, transparent 55%),
+    radial-gradient(1000px 620px at 88% 82%, rgba(109, 40, 217, 0.09) 0%, transparent 50%),
+    radial-gradient(760px 520px at 72% 16%, rgba(14, 116, 144, 0.07) 0%, transparent 45%),
+    linear-gradient(165deg, #0a0f1e 0%, #0f172a 55%, #0a0f1e 100%);
 }
 
 [data-theme='lucky'] .desktop {
@@ -1301,6 +1302,34 @@ body,
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* 背景选择卡片（CSS 渐变默认 + 三张预制图） */
+.st-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.st-bg-card {
+  border: 2px solid rgba(var(--rgb-line), 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.st-bg-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.st-bg-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--rgb-primary), 0.25);
+}
+
 /* 主题选择卡片 */
 .st-theme-grid {
   display: grid;
@@ -1329,7 +1358,9 @@ body,
   box-shadow: 0 0 0 3px rgba(var(--rgb-primary), 0.25);
 }
 
-.st-theme-card img {
+.st-theme-card .st-theme-thumb,
+.st-bg-card img,
+.st-bg-card .st-bg-thumb {
   width: 100%;
   height: 80px;
   object-fit: cover;

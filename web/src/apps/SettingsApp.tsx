@@ -3,7 +3,7 @@ import { api, ApiError } from '../lib/api'
 import { emitHostsChanged } from '../lib/hostsBus'
 import { useDesktopSettings, DEFAULT_MON_COLORS, type MonColorKey } from '../lib/desktopSettingsStore'
 import { useSecuritySettings } from '../lib/securitySettingsStore'
-import { PRESET_BGS, THEMES } from '../lib/desktopPresets'
+import { BG_OPTIONS, THEMES } from '../lib/desktopPresets'
 import { useT, useI18n, tt, transErr, type Lang } from '../lib/i18n'
 import type { AppProps } from '../desktop/appRegistry'
 
@@ -242,8 +242,8 @@ export function SettingsApp({ onTitle }: AppProps) {
     </button>
   )
 
-  /** 当前背景是否为某张预制背景（用于提示文字） */
-  const activePreset = PRESET_BGS.find((p) => p.url === bg)
+  /** 当前背景是否为内置背景选项（CSS 渐变或三张预制图） */
+  const activeBg = BG_OPTIONS.find((o) => o.url === bg)
 
   return (
     <div className="st-root">
@@ -270,7 +270,7 @@ export function SettingsApp({ onTitle }: AppProps) {
         {section === 'personalize' ? (
           <>
             <div className="st-page-title">{t('个性化')}</div>
-            <div className="st-page-desc">{t('选择主题风格，整体配色与桌面背景将同步切换。')}</div>
+            <div className="st-page-desc">{t('选择主题风格，整体配色将同步切换；桌面背景可在下方单独设置。')}</div>
 
             {/* 主题风格 */}
             <div className="st-card">
@@ -290,7 +290,12 @@ export function SettingsApp({ onTitle }: AppProps) {
                       }}
                       title={t('应用主题：{0}', th.name)}
                     >
-                      <img src={th.bg} alt={t(th.name)} />
+                      <div
+                        className="st-theme-thumb"
+                        style={{
+                          background: `linear-gradient(135deg, ${th.swatch.window} 0%, ${th.swatch.primary} 100%)`,
+                        }}
+                      />
                       <div className="st-theme-meta">
                         <div className="st-theme-name">
                           <span>{t(th.name)}</span>
@@ -309,11 +314,49 @@ export function SettingsApp({ onTitle }: AppProps) {
               </div>
             </div>
 
+            {/* 桌面背景：CSS 渐变（默认）+ 三张预制图，与主题互相独立 */}
+            <div className="st-card">
+              <div className="st-card-title">{t('🖼️ 桌面背景')}</div>
+              <div className="st-tip" style={{ marginBottom: 10 }}>
+                {t('桌面背景与主题互相独立：选择背景不会改变主题配色。')}
+              </div>
+              <div className="st-bg-grid">
+                {BG_OPTIONS.map((o) => {
+                  const bgActive = bg === o.url
+                  return (
+                    <button
+                      key={o.id}
+                      className={`st-bg-card${bgActive ? ' active' : ''}`}
+                      onClick={() => {
+                        setBg(o.url)
+                        setBgPreview('')
+                        setBgOk(true)
+                        setBgMsg(t('已应用桌面背景「{0}」', o.name))
+                      }}
+                      title={t('应用背景：{0}', o.name)}
+                    >
+                      {o.url ? (
+                        <img src={o.url} alt={t(o.name)} />
+                      ) : (
+                        <div className="st-bg-thumb" style={{ background: o.cssPreview }} />
+                      )}
+                      <div className="st-theme-meta">
+                        <div className="st-theme-name">
+                          <span>{t(o.name)}</span>
+                          {bgActive && <span className="st-theme-check">✓</span>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* 自定义背景 */}
             <div className="st-card">
               <div className="st-card-title">{t('🖼️ 自定义背景')}</div>
               <div className="st-tip" style={{ marginBottom: 10 }}>
-                {activePreset ? t('当前背景：预制背景「{0}」', activePreset.name) : t('当前背景：自定义图片')}
+                {activeBg ? t('当前背景：{0}', activeBg.name) : t('当前背景：自定义图片')}
               </div>              <div className="field">
                 <label>{t('上传自定义图片')}</label>
                 <input
