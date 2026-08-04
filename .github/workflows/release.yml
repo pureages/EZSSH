@@ -1,7 +1,7 @@
 name: release
 
 # 推送 v* 标签时构建并发布到 GitHub Releases
-# 用法: git tag v0.0.1 && git push origin v0.0.1
+# 用法: git tag v0.0.2 && git push origin v0.0.2
 on:
   push:
     tags:

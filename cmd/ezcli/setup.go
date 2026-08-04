@@ -102,7 +102,7 @@ func cmdSetup(configPath string, langArg string) error {
 			pl("%s", err)
 			continue
 		}
-		confirm := promptPwd(r, T("确认密码"), "")
+		confirm := promptPwd(r, T("确认密码"), cfg.Password)
 		if confirm != password {
 			pl("两次输入不一致，请重试")
 			continue

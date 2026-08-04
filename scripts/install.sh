@@ -13,7 +13,7 @@
 #
 # 可配置环境变量:
 #   EZSSH_LANG=en|zh        安装界面语言
-#   EZSSH_VERSION=v0.0.1    指定版本（默认 latest release）
+#   EZSSH_VERSION=v0.0.2    指定版本（默认 latest release）
 #   EZSSH_BIN=/path         安装目录（默认 root 时 /usr/local/bin，否则 ~/.local/bin）
 #   EZSSH_WEB=/path/web/dist  前端安装位置（默认 ~/.ezssh/web/dist）
 #
@@ -169,4 +169,4 @@ say "Next, the initialization wizard will start (account/password/login route/po
 say "Press Enter to use defaults: admin / admin123456 / /login / 49466" "直接回车使用默认值: admin / admin123456 / /login / 49466"
 echo
 
-exec "$BIN/ezssh$EXT" setup
+exec "$BIN/ezssh$EXT" setup --lang "$LANG_CODE"
