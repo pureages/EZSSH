@@ -11,6 +11,7 @@
   - [2.3 自行构建](#s2-3)
 - [3. Web 桌面使用](#s3)
 - [4. 服务器类型](#s4)
+  - [4.1 Windows 安装 OpenSSH Server](#s4-1)
 - [5. 安全特性](#s5)
 - [6. 部署与运维](#s6)
   - [6.1 环境变量](#s6-1)
@@ -84,6 +85,44 @@ cd web && npm install && npm run build
 
 - **Linux**：任意支持 SSH 的发行版（Ubuntu / Debian / CentOS / Alpine 等），支持密码 / 私钥认证，可用全部应用。
 - **Windows**：支持 SSH 连接的 Windows 服务器（需启用 OpenSSH Server），监控、进程、文件管理等应用可用。
+
+> **注意**：添加 Windows 服务器并非走 RDP 的 3389 端口，而是走 **SSH 端口**，需要在服务器上安装 OpenSSH Server。
+
+<a id="s4-1"></a>
+### 4.1 Windows 安装 OpenSSH Server
+
+在需要添加的 Windows 服务器上，以管理员身份打开 PowerShell 执行以下命令：
+
+1. **检查是否已安装**（若已有 `sshd` 服务则忽略安装步骤）：
+
+   ```powershell
+   Get-Service -Name sshd
+   ```
+
+2. **安装服务**：
+
+   ```powershell
+   Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+   ```
+
+3. **启动并设为自动**：
+
+   ```powershell
+   Start-Service sshd
+   Set-Service -Name sshd -StartupType 'Automatic'
+   ```
+
+4. **检查防火墙规则**（确认 22 端口入站已放行）：
+
+   ```powershell
+   Get-NetFirewallRule -DisplayName "*SSH*" | Get-NetFirewallPortFilter | Where-Object {$_.LocalPort -eq 22}
+   ```
+
+   如果没有找到相关规则，运行以下命令创建：
+
+   ```powershell
+   New-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -DisplayName "OpenSSH Server (SSH)" -Enabled True -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow
+   ```
 
 <a id="s5"></a>
 ## 5. 安全特性
