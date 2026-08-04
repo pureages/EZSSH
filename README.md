@@ -38,6 +38,8 @@ docker run -d --name ezssh -p 49466:49466 \
 
 ### 3. 自行构建
 
+**环境要求**:Go 1.22+（构建后端）、Node.js 20+ 与 npm（仅构建前端时需要）。
+
 ```bash
 # 后端
 go build -buildvcs=false ./cmd/ezssh
