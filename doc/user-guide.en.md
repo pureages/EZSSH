@@ -45,7 +45,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/
 **CN mirror install script** (for users who can't reach GitHub from mainland China):
 
 ```bash
-bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install-cn.sh)
+EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)
 ```
 
 <a id="s2-2"></a>
