@@ -52,10 +52,9 @@ EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scri
 ### 2.2 Docker Deployment
 
 ```bash
-docker build -t ezssh .
 docker run -d --name ezssh -p 49466:49466 \
   -v ezssh-data:/app/data \
-  ezssh
+  pureages/ezssh:latest
 ```
 
 <a id="s2-3"></a>
