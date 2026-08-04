@@ -19,7 +19,7 @@ export function AuthPage() {
   const t = useT()
   const setAuthed = useSession((s) => s.setAuthed)
   const [initialized, setInitialized] = useState<boolean | null>(null)
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
