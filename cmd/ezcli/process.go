@@ -44,6 +44,7 @@ func (c *Config) StartServer() (int, error) {
 		"EZSSH_LISTEN=127.0.0.1",
 		"EZSSH_PORT="+strconv.Itoa(c.Port),
 		"EZSSH_DATA="+c.DataDir,
+		"EZSSH_WEB="+webDir(c),
 	)
 	setProcAttrs(cmd)
 	if err := cmd.Start(); err != nil {
@@ -56,6 +57,25 @@ func (c *Config) StartServer() (int, error) {
 		return 0, err
 	}
 	return pid, nil
+}
+
+// webDir 返回前端 web/dist 目录：
+// 优先服务端二进制同目录的 web/dist（预编译包布局：ezsshd 与 web/dist 同目录），
+// 其次 ~/.ezssh/web/dist（一键安装脚本布局），找不到返回空（后端会回退到其他候选）。
+func webDir(c *Config) string {
+	if c.ServerBinary != "" {
+		cand := filepath.Join(filepath.Dir(c.ServerBinary), "web", "dist")
+		if fi, err := os.Stat(cand); err == nil && fi.IsDir() {
+			return cand
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		cand := filepath.Join(home, ".ezssh", "web", "dist")
+		if fi, err := os.Stat(cand); err == nil && fi.IsDir() {
+			return cand
+		}
+	}
+	return ""
 }
 
 // StopServer 停止服务进程并删除 PID 文件；未记录 PID 时直接清理。

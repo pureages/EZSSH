@@ -160,10 +160,33 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
+// webDistCandidates 返回前端 web/dist 的候选目录，按优先级排列：
+// 1. EZSSH_WEB 环境变量（显式指定，最高优先）
+// 2. 工作目录下的 web/dist（开发态 / 源码内运行）
+// 3. 可执行文件同目录下的 web/dist（单目录部署，如 tar 包解压后同一目录）
+// 4. ~/.ezssh/web/dist（一键安装脚本安装的固定位置）
+func webDistCandidates() []string {
+	cands := []string{}
+	if d := os.Getenv("EZSSH_WEB"); d != "" {
+		cands = append(cands, d)
+	}
+	cands = append(cands, filepath.Join("web", "dist"))
+	if exe, err := os.Executable(); err == nil {
+		cands = append(cands, filepath.Join(filepath.Dir(exe), "web", "dist"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		cands = append(cands, filepath.Join(home, ".ezssh", "web", "dist"))
+	}
+	return cands
+}
+
 func (s *Server) staticHandler() http.Handler {
-	dist := filepath.Join("web", "dist")
-	if _, err := os.Stat(dist); err == nil {
-		return http.FileServer(http.Dir(dist))
+	for _, dist := range webDistCandidates() {
+		if fi, err := os.Stat(dist); err == nil && fi.IsDir() {
+			if _, err := os.Stat(filepath.Join(dist, "index.html")); err == nil {
+				return http.FileServer(http.Dir(dist))
+			}
+		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {

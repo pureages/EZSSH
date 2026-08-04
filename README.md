@@ -14,9 +14,9 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-脚本会自动下载源码、检测平台/架构、编译服务端与终端 Agent、构建前端，并进入初始化向导。
+脚本直接从 GitHub Releases 下载预编译产物（服务端 + 终端 Agent + 前端界面），**无需安装 Go / Node.js，也不会拉取源码**，安装完成后自动进入初始化向导。
 
-> 需要 Ubuntu 已安装 Go 1.25+。也可以先克隆仓库再本地安装：`git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
+> 支持 Linux / macOS / Windows(msys)。也可从源码构建：`git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
 
 ### 2. Docker 部署
 

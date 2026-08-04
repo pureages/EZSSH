@@ -1,0 +1,79 @@
+name: release
+
+# 推送 v* 标签时构建并发布到 GitHub Releases
+# 用法: git tag v0.0.1 && git push origin v0.0.1
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm install
+          npm run build
+
+      - name: Compute version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries (${{ matrix.goos }}/${{ matrix.goarch }})
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          EXT=""
+          [ "$GOOS" = "windows" ] && EXT=".exe"
+          mkdir -p stage
+          go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -o "stage/ezsshd$EXT" ./cmd/ezssh
+          go build -buildvcs=false -trimpath -ldflags "-s -w" \
+            -o "stage/ezssh$EXT" ./cmd/ezcli
+          # 前端产物随包分发
+          cp -r web/dist stage/web
+          tar -czf "ezssh-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+            -C stage .
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ezssh-*.tar.gz
+          generate_release_notes: true
