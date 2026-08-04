@@ -1,0 +1,23 @@
+# Go
+*.exe
+*.exe~
+*.test
+*.out
+easyssh.db
+easyssh.db-shm
+easyssh.db-wal
+test_out.txt
+
+# 运行时数据（数据目录 + 旧版根目录数据库）
+data/
+ezssh.db
+ezssh.db-shm
+ezssh.db-wal
+
+# Node
+node_modules/
+web/dist/
+
+# 临时与日志
+*.log
+.DS_Store
