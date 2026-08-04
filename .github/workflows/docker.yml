@@ -12,7 +12,7 @@ on:
       - 'v*'
 
 env:
-  IMAGE: pureage/ezssh
+  IMAGE: pureages/ezssh
 
 jobs:
   build:
