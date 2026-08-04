@@ -12,7 +12,6 @@
 
 <p align="center">
   <img src="img/1.png" alt="EZSSH 预览 1" width="48%" />
-  <br/>
   <img src="img/3.png" alt="EZSSH 预览 2" width="48%" />
 </p>
 
