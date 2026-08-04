@@ -19,8 +19,7 @@
 
 ### 1. 一键安装（复制粘贴即可）
 
-
-脚本直接从 GitHub Releases 下载预编译产物（服务端 + 终端 Agent + 前端界面），**无需安装 Go / Node.js，也不会拉取源码**，安装完成后自动进入初始化向导。支持 Linux / macOS / Windows(msys)。
+支持 Linux / macOS / Windows(msys)。
 
 **国际-安装脚本**
 

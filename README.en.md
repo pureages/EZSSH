@@ -19,21 +19,19 @@ For more details, see the [User Guide](doc/user-guide.en.md)
 
 ### 1. One-Click Install (Copy & Paste)
 
+Supports Linux / macOS / Windows(msys).
+
+**International install script**
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-The script downloads prebuilt artifacts directly from GitHub Releases (server + terminal Agent + web UI). **No Go / Node.js required, and it never clones the source code.** The initialization wizard starts automatically after installation.
-
-> Supports Linux / macOS / Windows(msys). You can also build from source: `git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
-
-**CN mirror install** (when GitHub is unreachable from mainland China, install via the Gitee mirror):
+**CN mirror install script** (for users who can't reach GitHub from mainland China):
 
 ```bash
 bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
 ```
-
-> Gitee mirror repo: https://gitee.com/pureages/EZSSH
 
 ### 2. Docker Deployment
 

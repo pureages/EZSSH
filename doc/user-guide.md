@@ -32,15 +32,22 @@
 ## 2. 快速开始
 
 <a id="s2-1"></a>
-### 2.1 一键安装（复制粘贴即可）
+### 1. 一键安装（复制粘贴即可）
+
+支持 Linux / macOS / Windows(msys)。
+
+**国际-安装脚本**
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-脚本直接从 GitHub Releases 下载预编译产物（服务端 + 终端 Agent + 前端界面），**无需安装 Go / Node.js，也不会拉取源码**，安装完成后自动进入初始化向导。
+**国内加速-安装脚本**：
 
-> 支持 Linux / macOS / Windows(msys)。也可从源码构建：`git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
+```bash
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+```
+
 
 <a id="s2-2"></a>
 ### 2.2 Docker 部署

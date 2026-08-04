@@ -32,15 +32,21 @@ The system consists of two parts:
 ## 2. Quick Start
 
 <a id="s2-1"></a>
-### 2.1 One-Click Install (Copy & Paste)
+### 1. One-Click Install (Copy & Paste)
+
+Supports Linux / macOS / Windows(msys).
+
+**International install script**
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-The script downloads prebuilt artifacts directly from GitHub Releases (server + terminal Agent + web UI). **No Go / Node.js required, and it never clones the source code.** The initialization wizard starts automatically after installation.
+**CN mirror install script** (for users who can't reach GitHub from mainland China):
 
-> Supports Linux / macOS / Windows(msys). You can also build from source: `git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
+```bash
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+```
 
 <a id="s2-2"></a>
 ### 2.2 Docker Deployment
