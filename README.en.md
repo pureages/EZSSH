@@ -15,6 +15,14 @@ For more details, see the [User Guide](doc/user-guide.en.md)
   <img src="img/3.png" alt="EZSSH Preview 2" width="48%" />
 </p>
 
+## Features
+
+1. **Visual operations**: native SSH / SFTP driven — no background Agent required on servers, safe and controllable.
+2. **Cross-server file transfer**: copy and paste files directly between different servers.
+3. **Docker management**: manage Docker visually and centrally.
+4. **Server monitoring**: monitor server status in real time, with a built-in task manager.
+5. **One-click commands**: run frequently used commands with one click, and manage sites centrally.
+
 ## Quick Start
 
 ### 1. One-Click Install (Copy & Paste)
@@ -40,8 +48,6 @@ docker run -d --name ezssh -p 49466:49466 \
   -v ezssh-data:/app/data \
   pureages/ezssh:latest
 ```
-
-> The image contains only the compiled server and frontend artifacts — no source code. Supports `linux/amd64` and `linux/arm64`. You can also build from source: `docker build -t ezssh . && docker run -d --name ezssh -p 49466:49466 -v ezssh-data:/app/data ezssh`
 
 ### 3. Build from Source
 
