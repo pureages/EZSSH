@@ -9,7 +9,7 @@ import (
 )
 
 // appVersion 为 ezssh Agent 版本号。
-const appVersion = "0.0.4"
+const appVersion = "0.0.5"
 
 // cmdMenu 交互式管理菜单主循环。
 func cmdMenu(cfg *Config) error {
