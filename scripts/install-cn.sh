@@ -6,23 +6,164 @@
 # 用法 / Usage:
 #   bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install-cn.sh)
 #
-# 说明: 国内网络访问 GitHub 受限时使用本脚本。它从 Gitee 镜像仓库拉取安装脚本，
-#       并以 gitee 为下载源获取预编译产物（服务端 + Agent + 前端）。
-# 本脚本本身逻辑与 install.sh 完全一致，仅固定 download source = gitee。
+# 说明: 国内网络访问 GitHub 受限时使用本脚本。本脚本自包含全部安装逻辑，
+#       直接从 Gitee Releases 下载预编译产物（服务端 + Agent + 前端）。
+# 自包含设计：不依赖从仓库拉取 install.sh，只需本文件可访问即可。
+#
+# 可配置环境变量:
+#   EZSSH_LANG=en|zh        安装界面语言
+#   EZSSH_VERSION=v0.0.2    指定版本（默认 latest release）
+#   EZSSH_BIN=/path         安装目录（默认 root 时 /usr/local/bin，否则 ~/.local/bin）
+#   EZSSH_WEB=/path/web/dist  前端安装位置（默认 ~/.ezssh/web/dist）
 set -euo pipefail
 
-# 从 Gitee 拉取标准安装脚本，固定使用 gitee 源，再以当前终端执行。
-# 分支名统一为 main（Gitee 仓库从 GitHub 导入，默认分支为 main）。
-TMP_SCRIPT="$(mktemp)"
-trap 'rm -f "$TMP_SCRIPT"' EXIT
+# 固定使用 Gitee 源
+REPO="pureages/EZSSH"
+API_BASE="https://gitee.com/api/v5/repos/$REPO"
+DL_BASE="https://gitee.com/$REPO/releases/download"
 
-if ! curl -fsSL -o "$TMP_SCRIPT" \
-  "https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh"; then
-  echo "错误: 无法从 Gitee 拉取 install.sh，请检查网络或仓库地址。"
-  echo "Error: failed to fetch install.sh from Gitee."
+# ---- Step 1: choose installation language / 第一步: 选择安装语言 --------------
+LANG_CODE="en"
+if [ -n "${EZSSH_LANG:-}" ]; then
+  case "$EZSSH_LANG" in
+    en|EN|english|English) LANG_CODE=en ;;
+    zh|zh-CN|zh_CN|chinese|Chinese|中文) LANG_CODE=zh ;;
+    *) LANG_CODE=en ;;
+  esac
+else
+  echo ""
+  echo "=============================================="
+  echo " EZssh 国内安装向导 | CN Installer"
+  echo " Select installation language | 请选择安装语言:"
+  echo ""
+  echo "   1) English"
+  echo "   2) 简体中文"
+  echo "=============================================="
+  printf " > "
+  read -r choice || true
+  case "$choice" in
+    1|en|EN|english|English) LANG_CODE=en ;;
+    2|zh|zh-CN|zh_CN|chinese|Chinese|中文) LANG_CODE=zh ;;
+    *) LANG_CODE=en ;;   # default English / 默认英文
+  esac
+fi
+
+# Bilingual output / 双语输出: say "English text" "中文文本"
+say() {
+  if [ "$LANG_CODE" = "zh" ]; then
+    printf '%s\n' "$2"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# ---- Basic checks / 基础检测 --------------------------------------------------
+for tool in curl tar; do
+  command -v "$tool" >/dev/null 2>&1 || { say "Error: $tool is required" "错误: 需要 $tool 命令"; exit 1; }
+done
+
+# Platform / arch detection / 平台/架构检测
+OS="$(uname -s)"
+case "$OS" in
+  Linux)  PLATFORM=linux ;;
+  Darwin) PLATFORM=darwin ;;
+  MINGW*|MSYS*|CYGWIN*) PLATFORM=windows ;;
+  *) say "Error: unsupported platform $OS" "错误: 不支持的平台 $OS"; exit 1 ;;
+esac
+
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64|amd64) GOARCH=amd64 ;;
+  aarch64|arm64) GOARCH=arm64 ;;
+  i386|i686) GOARCH=386 ;;
+  *) say "Error: unsupported architecture $ARCH" "错误: 不支持的架构 $ARCH"; exit 1 ;;
+esac
+
+EXT=""
+[ "$PLATFORM" = "windows" ] && EXT=".exe"
+
+# ---- Resolve version / 解析版本 ----------------------------------------------
+VERSION="${EZSSH_VERSION:-}"
+if [ -z "$VERSION" ]; then
+  say "Resolving latest release ..." "正在获取最新版本 ..."
+  RELEASE_JSON="$(curl -fsSL "$API_BASE/releases/latest")"
+  TAG="$(printf '%s' "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  if [ -z "$TAG" ]; then
+    say "Error: failed to resolve latest release" "错误: 无法获取最新版本"
+    exit 1
+  fi
+  VERSION="$TAG"
+fi
+VERSION="${VERSION#v}"
+
+ASSET="ezssh-${VERSION}-${PLATFORM}-${GOARCH}.tar.gz"
+URL="$DL_BASE/v${VERSION}/${ASSET}"
+
+# ---- Install directory / 安装目录 --------------------------------------------
+BIN="${EZSSH_BIN:-}"
+if [ -z "$BIN" ]; then
+  if [ "$(id -u 2>/dev/null || echo 0)" -eq 0 ] && [ -w /usr/local/bin ]; then
+    BIN=/usr/local/bin
+  else
+    BIN="$HOME/.local/bin"
+  fi
+fi
+mkdir -p "$BIN"
+
+# 前端安装位置（默认 ~/.ezssh/web/dist）
+WEB_DIR="${EZSSH_WEB:-$HOME/.ezssh/web/dist}"
+mkdir -p "$(dirname "$WEB_DIR")"
+
+echo "=============================================="
+say " EZssh CN installer (platform: $PLATFORM/$GOARCH)" " EZssh 国内安装向导 (平台: $PLATFORM/$GOARCH)"
+say " Source:   gitee" " 下载源:   gitee"
+say " Version:  v$VERSION" " 版本:     v$VERSION"
+say " Install to: $BIN" " 安装目录: $BIN"
+say " Web dist:  $WEB_DIR" " 前端目录: $WEB_DIR"
+echo "=============================================="
+
+# ---- Download & install / 下载并安装 ----------------------------------------
+echo
+say "[1/2] Downloading $ASSET ..." "[1/2] 正在下载 $ASSET ..."
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+if ! curl -fsSL -o "$TMP/$ASSET" "$URL"; then
+  say "Error: download failed. Check network, or set EZSSH_VERSION."
+  say "Ensure the version exists on Gitee Releases: $DL_BASE"
+  say "错误: 下载失败。请检查网络，或通过 EZSSH_VERSION 指定版本。"
+  say "请确认该版本已在 Gitee Releases 发布: $DL_BASE"
   exit 1
 fi
 
-# 固定 gitee 源执行
-export EZSSH_SRC=gitee
-exec bash "$TMP_SCRIPT"
+say "[2/2] Installing ..." "[2/2] 正在安装 ..."
+tar -xzf "$TMP/$ASSET" -C "$TMP"
+
+# 二进制
+cp "$TMP/ezsshd$EXT" "$BIN/ezsshd$EXT"
+cp "$TMP/ezssh$EXT" "$BIN/ezssh$EXT"
+chmod +x "$BIN/ezsshd$EXT" "$BIN/ezssh$EXT"
+
+# 前端
+mkdir -p "$WEB_DIR"
+cp -r "$TMP"/web/. "$WEB_DIR"/
+
+# ---- PATH check / PATH 提示 ----------------------------------------------------
+if ! echo ":$PATH:" | grep -q ":$BIN:"; then
+  say "Note: $BIN is not in PATH." "注意: $BIN 不在 PATH 中。"
+  say "  Add the following line to ~/.bashrc or ~/.zshrc:" "  请将以下行加入 ~/.bashrc 或 ~/.zshrc:"
+  echo "    export PATH=\"$BIN:\$PATH\""
+  say "  Then run: source ~/.bashrc" "  然后执行: source ~/.bashrc"
+fi
+
+echo
+say "Installation complete." "安装完成。"
+say "  ezsshd   server:  $BIN/ezsshd$EXT" "  ezsshd  服务端:  $BIN/ezsshd$EXT"
+say "  ezssh    terminal: $BIN/ezssh$EXT" "  ezssh   管理终端: $BIN/ezssh$EXT"
+say "  frontend:         $WEB_DIR" "  前端:            $WEB_DIR"
+echo
+say "Next, the initialization wizard will start (account/password/login route/port)..." "接下来进入初始化向导（账号/密码/登录路由/监听端口）..."
+say "Press Enter to use defaults: admin / admin123456 / /login / 49466" "直接回车使用默认值: admin / admin123456 / /login / 49466"
+echo
+
+exec "$BIN/ezssh$EXT" setup --lang "$LANG_CODE"
