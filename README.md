@@ -12,9 +12,8 @@
 
 <p align="center">
   <img src="img/1.png" alt="EZSSH 预览 1" width="48%" />
-  <img src="img/2.png" alt="EZSSH 预览 2" width="48%" />
   <br/>
-  <img src="img/3.png" alt="EZSSH 预览 3" width="48%" />
+  <img src="img/3.png" alt="EZSSH 预览 2" width="48%" />
 </p>
 
 ## 快速开始
