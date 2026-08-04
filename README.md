@@ -66,8 +66,6 @@ cd web && npm install && npm run build
 
 默认监听 `127.0.0.1:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
 
-## 社区鸣谢
-感谢 [LINUX DO 社区](https://linux.do) 对开源交流与项目成长的支持。
 
 ## License
 
