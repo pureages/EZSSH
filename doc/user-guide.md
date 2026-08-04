@@ -160,3 +160,7 @@ cd web && npm install && npm run build
 ### 6.3 公网部署建议
 
 > **警告**：默认监听 127.0.0.1。公网部署强烈建议置于 Caddy / Nginx 之后并启用 HTTPS；不要直接暴露裸 HTTP 到公网。
+
+---
+
+[English](user-guide.en.md) | 简体中文
