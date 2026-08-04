@@ -45,7 +45,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/
 **国内加速-安装脚本**：
 
 ```bash
-bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install-cn.sh)
 ```
 
 

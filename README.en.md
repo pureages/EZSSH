@@ -30,7 +30,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/
 **CN mirror install script** (for users who can't reach GitHub from mainland China):
 
 ```bash
-bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install-cn.sh)
 ```
 
 ### 2. Docker Deployment
