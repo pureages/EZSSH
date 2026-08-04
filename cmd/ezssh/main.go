@@ -16,7 +16,7 @@ import (
 // version 为 EZSSH 网关版本号，可通过构建参数覆盖：
 //
 //	go build -ldflags "-X main.version=x.y.z"
-var version = "0.0.2"
+var version = "0.0.3"
 
 func getenv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
