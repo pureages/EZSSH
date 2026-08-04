@@ -115,14 +115,23 @@ func (c *Config) IsRunning() bool {
 	return false
 }
 
-// waitHealthy 轮询等待服务可达，最长 timeout。
+// waitHealthy 轮询等待服务 HTTP 就绪，最长 timeout。
+// 注意：进程存在(alive)不代表服务可用（启动即崩溃时 PID 可能尚未回收），
+// 因此这里以 HTTP 健康探测为准，且探测失败时若进程已死则立即判失败。
 func (c *Config) waitHealthy(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	for !c.IsRunning() {
+	for {
+		client := NewClient(c)
+		if client.Health() {
+			return true
+		}
+		// 进程已死则无需继续等待
+		if pid := c.Pid(); pid > 0 && !alive(pid) {
+			return false
+		}
 		if time.Now().After(deadline) {
 			return false
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	return true
 }

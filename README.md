@@ -27,6 +27,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/
 
 > 支持 Linux / macOS / Windows(msys)。也可从源码构建：`git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
 
+**国内加速**（GitHub 访问受限时，通过 Gitee 镜像仓库安装）：
+
+```bash
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+```
+
+> Gitee 镜像仓库：https://gitee.com/pureages/EZSSH
+
 ### 2. Docker 部署
 
 ```bash

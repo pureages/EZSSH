@@ -27,6 +27,14 @@ The script downloads prebuilt artifacts directly from GitHub Releases (server + 
 
 > Supports Linux / macOS / Windows(msys). You can also build from source: `git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
 
+**CN mirror install** (when GitHub is unreachable from mainland China, install via the Gitee mirror):
+
+```bash
+bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/master/scripts/install-cn.sh)
+```
+
+> Gitee mirror repo: https://gitee.com/pureages/EZSSH
+
 ### 2. Docker Deployment
 
 ```bash

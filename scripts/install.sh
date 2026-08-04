@@ -13,6 +13,7 @@
 #
 # 可配置环境变量:
 #   EZSSH_LANG=en|zh        安装界面语言
+#   EZSSH_SRC=github|gitee  下载源（默认 github；国内可设 gitee）
 #   EZSSH_VERSION=v0.0.2    指定版本（默认 latest release）
 #   EZSSH_BIN=/path         安装目录（默认 root 时 /usr/local/bin，否则 ~/.local/bin）
 #   EZSSH_WEB=/path/web/dist  前端安装位置（默认 ~/.ezssh/web/dist）
@@ -85,12 +86,28 @@ esac
 EXT=""
 [ "$PLATFORM" = "windows" ] && EXT=".exe"
 
-# ---- Resolve version / 解析版本 ----------------------------------------------
+# ---- Resolve source / 下载源 ---------------------------------------------------
+# EZSSH_SRC=github（默认）→ GitHub Releases；gitee → Gitee Releases（国内加速）
 REPO="pureages/EZSSH"
+SRC="${EZSSH_SRC:-github}"
+case "$SRC" in
+  gitee|Gitee)
+    SRC=gitee
+    API_BASE="https://gitee.com/api/v5/repos/$REPO"
+    DL_BASE="https://gitee.com/$REPO/releases/download"
+    ;;
+  *)
+    SRC=github
+    API_BASE="https://api.github.com/repos/$REPO"
+    DL_BASE="https://github.com/$REPO/releases/download"
+    ;;
+esac
+
+# ---- Resolve version / 解析版本 ----------------------------------------------
 VERSION="${EZSSH_VERSION:-}"
 if [ -z "$VERSION" ]; then
   say "Resolving latest release ..." "正在获取最新版本 ..."
-  RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")"
+  RELEASE_JSON="$(curl -fsSL "$API_BASE/releases/latest")"
   TAG="$(printf '%s' "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
   if [ -z "$TAG" ]; then
     say "Error: failed to resolve latest release" "错误: 无法获取最新版本"
@@ -101,7 +118,7 @@ fi
 VERSION="${VERSION#v}"
 
 ASSET="ezssh-${VERSION}-${PLATFORM}-${GOARCH}.tar.gz"
-URL="https://github.com/$REPO/releases/download/v${VERSION}/${ASSET}"
+URL="$DL_BASE/v${VERSION}/${ASSET}"
 
 # ---- Install directory / 安装目录 --------------------------------------------
 BIN="${EZSSH_BIN:-}"
@@ -120,6 +137,7 @@ mkdir -p "$(dirname "$WEB_DIR")"
 
 echo "=============================================="
 say " EZssh installer (platform: $PLATFORM/$GOARCH)" " EZssh 安装向导 (平台: $PLATFORM/$GOARCH)"
+say " Source:   $SRC" " 下载源:   $SRC"
 say " Version:  v$VERSION" " 版本:     v$VERSION"
 say " Install to: $BIN" " 安装目录: $BIN"
 say " Web dist:  $WEB_DIR" " 前端目录: $WEB_DIR"
