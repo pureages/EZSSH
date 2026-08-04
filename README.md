@@ -2,7 +2,7 @@
 
 > [English](README.en.md) | 简体中文
 
-版本：v0.0.5
+版本：v0.0.5-2
 
 **原生 SSH / SFTP驱动的轻量干净、可视化的自托管中心化 SSH Web 网关，GO驱动**，服务器无需任何 Agent，安全可控。
 
@@ -42,7 +42,6 @@ docker run -d --name ezssh -p 49466:49466 \
   pureages/ezssh:latest
 ```
 
-> 镜像仅包含编译后的服务端与前端产物，不含源码。支持 `linux/amd64`、`linux/arm64`。也可从源码自构建：`docker build -t ezssh . && docker run -d --name ezssh -p 49466:49466 -v ezssh-data:/app/data ezssh`
 
 ### 3. 自行构建
 
