@@ -37,11 +37,12 @@ EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scri
 ### 2. Docker 部署
 
 ```bash
-docker build -t ezssh .
 docker run -d --name ezssh -p 49466:49466 \
   -v ezssh-data:/app/data \
-  ezssh
+  pureage/ezssh:latest
 ```
+
+> 镜像仅包含编译后的服务端与前端产物，不含源码。支持 `linux/amd64`、`linux/arm64`。也可从源码自构建：`docker build -t ezssh . && docker run -d --name ezssh -p 49466:49466 -v ezssh-data:/app/data ezssh`
 
 ### 3. 自行构建
 

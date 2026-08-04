@@ -36,11 +36,12 @@ EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scri
 ### 2. Docker Deployment
 
 ```bash
-docker build -t ezssh .
 docker run -d --name ezssh -p 49466:49466 \
   -v ezssh-data:/app/data \
-  ezssh
+  pureage/ezssh:latest
 ```
+
+> The image contains only the compiled server and frontend artifacts — no source code. Supports `linux/amd64` and `linux/arm64`. You can also build from source: `docker build -t ezssh . && docker run -d --name ezssh -p 49466:49466 -v ezssh-data:/app/data ezssh`
 
 ### 3. Build from Source
 

@@ -1,0 +1,26 @@
+# 版本控制
+.git
+.gitignore
+
+# 构建产物与依赖
+web/node_modules
+web/dist
+*.exe
+*.tar.gz
+data
+*.db
+
+# 文档与脚本（构建不需要）
+doc
+img
+README.md
+README.en.md
+
+# 环境
+.env
+*.log
+
+# IDE
+.idea
+.vscode
+*.swp

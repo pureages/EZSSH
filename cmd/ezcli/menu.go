@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -16,9 +17,14 @@ func cmdMenu(cfg *Config) error {
 	for {
 		printHeader(cfg)
 		pl("")
-		pl("  1) 运行状态      2) 查看账号信息")
-		pl("  3) 修改账号密码  4) 修改登录路由")
-		pl("  5) 停止服务      6) 启动服务")
+		pl("  1) 运行状态")
+		pl("  2) 查看账号信息")
+		pl("  3) 修改账号密码")
+		pl("  4) 修改登录路由")
+		pl("  5) 停止服务")
+		pl("  6) 启动服务")
+		pl("  7) 检查更新")
+		pl("  8) 卸载 EZSSH")
 		pl("  0) 退出")
 		pf("请选择: ")
 		line := strings.TrimSpace(readLine(r))
@@ -35,6 +41,10 @@ func cmdMenu(cfg *Config) error {
 			cmdStop(cfg)
 		case "6":
 			cmdStart(cfg)
+		case "7":
+			cmdCheckUpdate(cfg)
+		case "8":
+			cmdUninstall(cfg, r)
 		case "0", "q", "exit":
 			pl("再见。")
 			return nil
@@ -185,6 +195,83 @@ func cmdStart(cfg *Config) {
 	pl("服务已启动 (PID %d)。", pid)
 }
 
+// cmdCheckUpdate 检查最新版本（调用服务端 /api/update-check）。
+func cmdCheckUpdate(cfg *Config) {
+	pl("")
+	pl("--- 检查更新 ---")
+	if !cfg.IsRunning() {
+		pl("服务未运行，无法检查更新。请先启动服务。")
+		return
+	}
+	st, err := NewClient(cfg).UpdateCheck()
+	if err != nil {
+		pl("检查更新失败: %v%s", err, loginErrHint(err))
+		return
+	}
+	current := strVal(st, "current")
+	latest := strVal(st, "latest")
+	available, _ := st["update_available"].(bool)
+	pl("当前版本: v%s", current)
+	pl("最新版本: v%s", latest)
+	if available {
+		pl("发现新版本！请打开 Web 界面，在「设置 → 关于EZSSH」中点击一键更新。")
+		pl("或重新运行安装脚本以升级: bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)")
+	} else {
+		pl("已是最新版本。")
+	}
+}
+
+// cmdUninstall 卸载 EZSSH：停止服务、删除二进制、删除配置文件与数据目录。
+func cmdUninstall(cfg *Config, r *bufio.Reader) {
+	pl("")
+	pl("--- 卸载 EZSSH ---")
+	pl("此操作将:")
+	pl("  • 停止正在运行的服务")
+	pl("  • 删除可执行文件: %s", cfg.ServerBinary)
+	if self, err := os.Executable(); err == nil {
+		pl("  • 删除可执行文件: %s", self)
+	}
+	dir := filepath.Dir(cfg.path)
+	pl("  • 删除配置与数据目录: %s（含数据库、加密凭据、日志）", dir)
+	pl("")
+	pf("确定要卸载吗？输入 yes 继续: ")
+	ans := strings.ToLower(strings.TrimSpace(readLine(r)))
+	if ans != "yes" && ans != "y" {
+		pl("已取消卸载。")
+		return
+	}
+	// 停止服务
+	if cfg.IsRunning() {
+		if err := cfg.StopServer(); err != nil {
+			pl("停止服务失败: %v", err)
+		} else {
+			pl("服务已停止。")
+		}
+	}
+	// 删除二进制
+	removed := map[string]bool{}
+	if cfg.ServerBinary != "" {
+		if err := os.Remove(cfg.ServerBinary); err == nil {
+			removed[cfg.ServerBinary] = true
+		}
+	}
+	if self, err := os.Executable(); err == nil {
+		if err := os.Remove(self); err == nil {
+			removed[self] = true
+		}
+	}
+	// 删除配置与数据目录（仅删除 agent 的 ~/.ezssh 下与 EZSSH 相关文件）
+	if cfg.path != "" {
+		dir := filepath.Dir(cfg.path)
+		_ = os.RemoveAll(dir)
+		pl("已删除配置与数据目录: %s", dir)
+	}
+	for f := range removed {
+		pl("已删除可执行文件: %s", f)
+	}
+	pl("EZSSH 已卸载。再见。")
+}
+
 // cmdOneShot 一次性子命令（便于脚本调用；passwd/route 仍以交互方式接收输入）。
 func cmdOneShot(cfg *Config, sub string) error {
 	r := bufio.NewReader(os.Stdin)
@@ -201,6 +288,10 @@ func cmdOneShot(cfg *Config, sub string) error {
 		cmdStart(cfg)
 	case "stop":
 		cmdStop(cfg)
+	case "update":
+		cmdCheckUpdate(cfg)
+	case "uninstall":
+		cmdUninstall(cfg, r)
 	default:
 		return errf("未知子命令: %s", sub)
 	}

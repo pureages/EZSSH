@@ -157,6 +157,14 @@ func (c *Client) ChangePassword(oldPwd, newPwd string) error {
 	return err
 }
 
+// UpdateCheck 检查 GitHub/Gitee 最新 Release 版本（需登录）。
+func (c *Client) UpdateCheck() (map[string]any, error) {
+	if err := c.Login(); err != nil {
+		return nil, err
+	}
+	return c.do(http.MethodGet, "/api/update-check", nil)
+}
+
 // Health 探测服务是否可达（短超时，供状态轮询与判活）。
 func (c *Client) Health() bool {
 	hc := &http.Client{Timeout: 2 * time.Second}
