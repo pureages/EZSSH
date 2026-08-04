@@ -29,13 +29,15 @@ For more details, see the [User Guide](doc/user-guide.en.md)
 
 Supports Linux / macOS / Windows(msys).
 
-**International install script**
+**Install script**
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-**CN mirror install script** (for users who can't reach GitHub from mainland China):
+**or**
+
+**CN mirror install script** (Gitee source, for users who can't reach GitHub from mainland China):
 
 ```bash
 EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)

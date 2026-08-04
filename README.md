@@ -29,18 +29,19 @@
 
 支持 Linux / macOS / Windows(msys)。
 
-**国际-安装脚本**
+**安装脚本**
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-**国内加速-安装脚本**：
+**或**
+
+**国内加速-安装脚本**（Gitee 源）：
 
 ```bash
 EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)
 ```
-
 
 ### 2. Docker 部署
 
