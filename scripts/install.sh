@@ -4,8 +4,9 @@
 # EZssh 一键安装脚本
 #
 # Usage / 用法:
-#   bash install.sh
-#   curl -fsSL https://example.com/install.sh | bash   # must be pulled to local first / 需先拉取到本地
+#   本地源码目录内:   bash scripts/install.sh
+#   远程一键安装:     curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh | bash
+#                    (脚本会自动克隆源码到临时目录再编译)
 #
 # Features / 功能:
 #   1. Detect platform/arch (linux / darwin / windows(msys,git-bash)) / 检测平台/架构
@@ -86,8 +87,24 @@ EXT=""
 [ "$PLATFORM" = "windows" ] && EXT=".exe"
 
 # Script directory (relationship between script and repo root) / 脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd || pwd)"
+
+# Locate source tree / 定位源码目录:
+#   本地仓库内执行 → 直接使用; 远程( curl | bash )执行 → 自动克隆到临时目录
+REPO_DIR=""
+if [ -f "$SCRIPT_DIR/../go.mod" ] && [ -d "$SCRIPT_DIR/../cmd" ]; then
+  REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  say "Source tree not found locally, cloning from GitHub ..." "本地未找到源码，正在从 GitHub 克隆 ..."
+  command -v git >/dev/null 2>&1 || { say "Error: git is required for remote installation" "错误: 远程安装需要 git 命令"; exit 1; }
+  TMP_DIR="$(mktemp -d 2>/dev/null || echo /tmp/ezssh_install)"
+  say "  git clone https://github.com/pureages/EZSSH.git -> $TMP_DIR" "  git clone https://github.com/pureages/EZSSH.git -> $TMP_DIR"
+  if ! git clone --depth 1 https://github.com/pureages/EZSSH.git "$TMP_DIR"; then
+    say "Error: failed to clone repository, please check network/proxy." "错误: 克隆仓库失败，请检查网络/代理。"
+    exit 1
+  fi
+  REPO_DIR="$TMP_DIR"
+fi
 
 # ---- Install directory / 安装目录 --------------------------------------------
 BIN=""

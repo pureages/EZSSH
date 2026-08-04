@@ -8,13 +8,15 @@
 
 ## 快速开始
 
-### 1. 运行安装脚本
+### 1. 一键安装（复制粘贴即可）
 
 ```bash
-bash scripts/install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
 ```
 
-脚本会自动检测平台/架构、编译服务端与终端 Agent、构建前端，并进入初始化向导。
+脚本会自动下载源码、检测平台/架构、编译服务端与终端 Agent、构建前端，并进入初始化向导。
+
+> 需要 Ubuntu 已安装 Go 1.25+。也可以先克隆仓库再本地安装：`git clone https://github.com/pureages/EZSSH.git && cd EZSSH && bash scripts/install.sh`
 
 ### 2. Docker 部署
 
