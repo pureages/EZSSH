@@ -58,13 +58,17 @@ docker run -d --name ezssh -p 49466:49466 \
 ```bash
 # Backend
 go build -buildvcs=false ./cmd/ezssh
-./ezsshd
+./ezssh
 
 # Frontend (optional; the backend can also serve web/dist directly)
 cd web && npm install && npm run build
 ```
 
 Listens on `0.0.0.0:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
+
+## Community Acknowledgment
+
+[Linux.do](https://linux.do)
 
 ## License
 

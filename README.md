@@ -59,7 +59,7 @@ docker run -d --name ezssh -p 49466:49466 \
 ```bash
 # 后端
 go build -buildvcs=false ./cmd/ezssh
-./ezsshd
+./ezssh
 
 # 前端（可选，后端也可直接托管 web/dist）
 cd web && npm install && npm run build
@@ -67,6 +67,9 @@ cd web && npm install && npm run build
 
 默认监听 `0.0.0.0:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
 
+## 社区鸣谢
+
+[Linux.do](https://linux.do)
 
 ## License
 
