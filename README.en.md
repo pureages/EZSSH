@@ -17,7 +17,7 @@ For more details, see the [User Guide](doc/user-guide.en.md)
 
 ## Features
 
-1. **Visual operations**: native SSH / SFTP driven — no background Agent required on servers, safe and controllable.
+1. **Visual operations**: based on native SSH / SFTP — no background Agent required on the managed servers, safe and controllable.
 2. **Cross-server file transfer**: copy and paste files directly between different servers.
 3. **Docker management**: manage Docker visually and centrally.
 4. **Server monitoring**: monitor server status in real time, with a built-in task manager.
