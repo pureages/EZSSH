@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { setPendingTerminalCwd } from '../lib/terminalLaunch'
 import { consumePendingFmCwd } from '../lib/fmLaunch'
@@ -12,6 +12,44 @@ import type { AppProps } from '../desktop/appRegistry'
 import { CodeEditor } from '../components/CodeEditor'
 
 const ROOT = '/'
+
+/** 地址栏面包屑的一段（Windows 资源管理器风格） */
+interface Crumb {
+  label: string
+  path: string
+}
+
+/**
+ * 把当前路径拆成「面包屑」按钮序列：每一段（根、盘符、各级目录）都是一个可点击按钮，
+ * 点击直接跳到该段路径。Windows 路径如 "C:/Users/name" → [此电脑, C:, Users, name]。
+ */
+function pathCrumbs(cwd: string, isWin: boolean, rootLabel: string): Crumb[] {
+  if (cwd === ROOT) return [{ label: rootLabel, path: ROOT }]
+  if (isWin) {
+    const norm = cwd.replace(/\/+/g, '/')
+    const parts = norm.split('/').filter(Boolean)
+    const crumbs: Crumb[] = [{ label: rootLabel, path: ROOT }]
+    let acc = ''
+    for (const p of parts) {
+      if (/^[A-Za-z]:$/.test(p)) {
+        acc = p + '/'
+        crumbs.push({ label: p, path: acc })
+      } else {
+        acc += '/' + p
+        crumbs.push({ label: p, path: acc })
+      }
+    }
+    return crumbs
+  }
+  const parts = cwd.split('/').filter(Boolean)
+  const crumbs: Crumb[] = [{ label: rootLabel, path: ROOT }]
+  let acc = ''
+  for (const p of parts) {
+    acc += '/' + p
+    crumbs.push({ label: p, path: acc })
+  }
+  return crumbs
+}
 
 interface CtxMenu {
   x: number
@@ -104,6 +142,8 @@ function fmtClipNames(item: ClipItem): string {
 export function FileManagerApp({ hostId, platform }: AppProps) {
   const t = useT()
   const isWin = platform === 'windows'
+  /** 快速访问根目录显示名（Windows 下根目录是盘符列表，显示「此电脑」） */
+  const rootLabel = isWin ? t('此电脑') : '/'
   const [cwd, setCwd] = useState(ROOT)
   const [entries, setEntries] = useState<SftpEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -146,6 +186,9 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const [hostPlatforms, setHostPlatforms] = useState<Record<string, string>>({})
   const open = useWindowStore((s) => s.open)
 
+  /** 快速访问条目右键是否指向根目录：根目录是默认项，屏蔽剪切/删除/权限/移除等破坏性操作 */
+  const isRootQa = !!ctx?.qaPath && ctx.qaPath === ROOT
+
   // ---- 多选 / 键盘 / 地址栏（Windows 资源管理器风格）----
   /** 选中的条目名集合（当前目录内） */
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -161,8 +204,10 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   /** 地址栏输入值；null = 未编辑（显示当前目录） */
   const [addr, setAddr] = useState<string | null>(null)
-  /** 快速访问路径列表（按主机隔离，localStorage 持久化） */
+  /** 快速访问路径列表（按主机隔离，后端持久化；默认含根目录） */
   const [quickAccess, setQuickAccess] = useState<string[]>([])
+  /** 快速访问已从后端加载完成：此后增删才允许写回，避免初始覆盖 */
+  const qaLoadedRef = useRef(false)
   /** 行内重命名编辑状态（null = 未在编辑） */
   const [editingName, setEditingName] = useState<{ name: string; value: string } | null>(null)
   /** 行内重命名是否已在提交中（防 Enter 后输入框卸载触发重复 blur 提交） */
@@ -171,6 +216,48 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const renameCancelRef = useRef(false)
   /** 快速访问右键"重命名"→ 导航到父目录后待命触发的行内重命名目标 */
   const pendingRenameRef = useRef<string | null>(null)
+
+  // ---- 排序（Windows 资源管理器风格：点列头切换顺序/倒序）----
+  type SortKey = 'name' | 'size' | 'mode' | 'mtime'
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
+  /** 文件列表滚动容器（排序/刷新后恢复滚动位置用） */
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  /** 刷新后待恢复的滚动位置；null = 无需恢复 */
+  const pendingScrollTopRef = useRef<number | null>(null)
+  /** 下一次 load 是否保留滚动位置与选中（文件新建/修改/删除后的原地刷新，不做全局重建） */
+  const keepPositionRef = useRef(false)
+
+  /** 排序后的可见列表：目录始终置顶，组内按列与方向排序；同值回落到名称 */
+  const sortedEntries = useMemo(() => {
+    const { key, dir } = sort
+    const cmp = (a: SftpEntry, b: SftpEntry) => {
+      if (a.is_dir !== b.is_dir) return Number(b.is_dir) - Number(a.is_dir)
+      let r = 0
+      if (key === 'name') r = a.name.localeCompare(b.name, undefined, { numeric: true })
+      else if (key === 'size') r = (a.size || 0) - (b.size || 0)
+      else if (key === 'mode') r = a.mode.localeCompare(b.mode)
+      else r = a.mtime - b.mtime
+      if (r === 0) r = a.name.localeCompare(b.name, undefined, { numeric: true })
+      return r * dir
+    }
+    return [...entries].sort(cmp)
+  }, [entries, sort])
+
+  /** 目录内图片（按当前排序顺序）→ 全屏播放器的上一张/下一张导航 */
+  const imageEntries = useMemo(
+    () => sortedEntries.filter((e) => mediaKindOf(e.name) === 'image'),
+    [sortedEntries],
+  )
+
+  /** 点击列头：同列切换顺序/倒序，异列重置为顺序 */
+  const onSortClick = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }))
+
+  /** 刷新（文件新建/修改/删除后原地刷新目录）：保留滚动位置与选中，避免丢失定位 */
+  const refresh = (dir: string) => {
+    keepPositionRef.current = true
+    void load(dir)
+  }
 
   const updateSelected = useCallback((next: Set<string>) => {
     selectedRef.current = next
@@ -186,28 +273,38 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     preBandSel.current = new Set()
   }, [cwd, updateSelected])
 
-  // 快速访问：加载（按主机隔离）
+  // 快速访问：从后端加载（默认含根目录，跨浏览器/电脑同步）
   useEffect(() => {
     if (!hostId) return
-    try {
-      const all = JSON.parse(localStorage.getItem('ezssh_quick_access') ?? '{}')
-      if (Array.isArray(all[hostId])) setQuickAccess(all[hostId])
-    } catch {
-      /* ignore */
+    qaLoadedRef.current = false
+    setQuickAccess([ROOT])
+    let cancelled = false
+    api
+      .quickAccessGet(hostId)
+      .then((res) => {
+        if (cancelled) return
+        const arr = Array.isArray(res.paths) ? res.paths : []
+        setQuickAccess([ROOT, ...arr.filter((x) => x !== ROOT)])
+      })
+      .catch(() => {
+        if (!cancelled) setQuickAccess([ROOT])
+      })
+      .finally(() => {
+        if (!cancelled) qaLoadedRef.current = true
+      })
+    return () => {
+      cancelled = true
     }
   }, [hostId])
 
-  // 快速访问：持久化
-  useEffect(() => {
-    if (!hostId) return
-    try {
-      const all = JSON.parse(localStorage.getItem('ezssh_quick_access') ?? '{}')
-      all[hostId] = quickAccess
-      localStorage.setItem('ezssh_quick_access', JSON.stringify(all))
-    } catch {
-      /* ignore */
+  /** 更新本地快速访问状态；加载完成后按需写回后端（根目录始终默认展示，不写入） */
+  const updateQuickAccess = (next: string[]) => {
+    const normalized = next.includes(ROOT) ? next : [ROOT, ...next]
+    setQuickAccess(normalized)
+    if (hostId && qaLoadedRef.current) {
+      void api.quickAccessPut(hostId, normalized.filter((x) => x !== ROOT))
     }
-  }, [quickAccess, hostId])
+  }
 
   // 加载主机名与平台映射（用于展示剪贴板来源、跨服务器弹窗提示）
   useEffect(() => {
@@ -223,13 +320,24 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const load = useCallback(
     async (dir: string): Promise<boolean> => {
       if (!hostId) return false
+      // 原地刷新（文件新建/修改/删除）：记录滚动位置与选中，加载完成后恢复，避免重建列表丢失定位
+      const keepPos = keepPositionRef.current
+      keepPositionRef.current = false
+      const prevScroll = keepPos ? (listScrollRef.current?.scrollTop ?? 0) : 0
+      const prevSel = keepPos ? new Set(selectedRef.current) : null
       setLoading(true)
       setError('')
       try {
         const list = await api.sftpList(hostId, dir)
-        list.sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name))
-        setEntries(list)
         lastGoodRef.current = dir
+        // 恢复选中：仍存在的项保持选中（删除/重命名后失效的项自然清除）
+        if (prevSel) {
+          const keep = new Set([...prevSel].filter((n) => list.some((x) => x.name === n)))
+          if (keep.size) updateSelected(keep)
+        }
+        setEntries(list)
+        // 列表重建后滚动位置会归零（加载占位短暂替换表格），标记待恢复
+        pendingScrollTopRef.current = prevScroll
         // 快速访问右键"重命名"→ 导航到父目录后，自动对该条目进入行内重命名
         if (pendingRenameRef.current) {
           const target = list.find((x) => x.name === pendingRenameRef.current)
@@ -291,6 +399,15 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       cancelled = true
     }
   }, [cwd, load])
+
+  // 目录加载完成后恢复滚动位置：列表重建前（加载占位）滚动会被浏览器归零，
+  // 这里在表格渲染完毕、loading 已结束时一次性恢复。
+  useEffect(() => {
+    if (loading || pendingScrollTopRef.current == null) return
+    const el = listScrollRef.current
+    if (el) el.scrollTop = pendingScrollTopRef.current
+    pendingScrollTopRef.current = null
+  }, [loading, entries])
 
   /** 主题化输入弹窗（替代 window.prompt） */
   const askInput = (opts: Omit<InputDialogState, 'resolve'>): Promise<string | null> =>
@@ -400,6 +517,37 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     void openBigEditor(join(e.name), e.name)
   }
 
+  /** 全屏播放器上一张/下一张：在当前目录图片中循环切换（遵循当前排序顺序） */
+  const navImage = (dir: 1 | -1) => {
+    if (!player || player.kind !== 'image' || imageEntries.length < 2) return
+    const idx = imageEntries.findIndex((x) => x.name === player.name)
+    if (idx < 0) return
+    const next = imageEntries[(idx + dir + imageEntries.length) % imageEntries.length]
+    setImgScale(1)
+    setImgRotate(0)
+    setPlayer({ path: join(next.name), name: next.name, kind: 'image' })
+  }
+
+  // 播放器内键盘：←/→ 切图、Esc 关闭（图片模式下）
+  const navImageRef = useRef<((dir: 1 | -1) => void) | null>(null)
+  navImageRef.current = navImage
+  useEffect(() => {
+    if (!player || player.kind !== 'image') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        navImageRef.current?.(-1)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        navImageRef.current?.(1)
+      } else if (e.key === 'Escape') {
+        setPlayer(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [player])
+
   /** 在右侧面板加载文件：图片/视频内联预览；其余读取后做二进制检测 */
   const showPreview = async (p: string, name: string) => {
     if (!hostId) return
@@ -428,7 +576,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     try {
       await api.sftpWrite(hostId, preview.path, preview.content)
       setPreview({ ...preview, dirty: false })
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('保存失败'))
     }
@@ -472,7 +620,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       setBigEditor({ ...bigEditor, dirty: false })
       // 若右侧预览面板正打开同一文件，同步内容与保存态
       setPreview((p) => (p && p.path === bigEditor.path ? { ...p, content: bigEditor.content, dirty: false } : p))
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('保存失败'))
     }
@@ -497,7 +645,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     if (!name) return
     try {
       await api.sftpMkdir(hostId, join(name.trim()))
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('创建失败'))
     }
@@ -518,7 +666,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     const p = join(name.trim())
     try {
       await api.sftpWrite(hostId, p, '')
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('创建失败'))
     }
@@ -578,7 +726,9 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     }
     try {
       await api.sftpRename(hostId, join(e.name), join(newName))
-      void load(cwd)
+      // 重命名后选中新名，刷新时保持选中（旧名已不存在，需先设置让 load 捕获）
+      updateSelected(new Set([newName]))
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('重命名失败'))
     } finally {
@@ -603,7 +753,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     if (mode === null) return
     try {
       await api.sftpChmod(hostId, p, parseInt(mode.trim(), 8))
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('修改失败'))
     }
@@ -617,7 +767,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     if (!hostId) return
     try {
       await api.sftpExtract(hostId, join(e.name))
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('解压失败'))
     }
@@ -644,15 +794,17 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     }
   }
 
-  /** 添加到快速访问（去重） */
+  /** 添加到快速访问（去重，写回后端） */
   const addToQuickAccess = (e: SftpEntry) => {
     const p = join(e.name)
-    setQuickAccess((prev) => (prev.includes(p) ? prev : [...prev, p]))
+    if (quickAccess.includes(p)) return
+    updateQuickAccess([...quickAccess, p])
   }
 
-  /** 从快速访问移除 */
+  /** 从快速访问移除（根目录为默认项，不可移除） */
   const removeFromQuickAccess = (p: string) => {
-    setQuickAccess((prev) => prev.filter((x) => x !== p))
+    if (p === ROOT) return
+    updateQuickAccess(quickAccess.filter((x) => x !== p))
   }
 
   /** 快速访问显示名（取路径末段） */
@@ -705,7 +857,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     try {
       await api.sftpRemove(hostId, p)
       if (bigEditor && bigEditor.path === p) setBigEditor(null)
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('删除失败'))
     }
@@ -747,7 +899,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       })
       .then(() => {
         setUploading(null)
-        void load(cwd)
+        void refresh(cwd)
       })
       .catch((err: unknown) => {
         setUploading(null)
@@ -788,7 +940,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       if (preview && items.some((i) => i.name === preview.name)) setPreview(null)
       if (bigEditor && items.some((i) => join(i.name) === bigEditor.path)) setBigEditor(null)
       updateSelected(new Set())
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       alert(err instanceof ApiError ? err.message : t('删除失败'))
     }
@@ -834,7 +986,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         )
       }
       if (clip.action === 'cut' && !controller.signal.aborted) useClipboardStore.getState().clear()
-      void load(cwd)
+      void refresh(cwd)
     } catch (err) {
       if (controller.signal.aborted) {
         // 用户主动取消：静默，不弹错误
@@ -932,7 +1084,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       void paste()
     } else if (mod && key === 'a') {
       e.preventDefault()
-      updateSelected(new Set(entries.map((x) => x.name)))
+      updateSelected(new Set(sortedEntries.map((x) => x.name)))
     } else if (e.key === 'Delete') {
       if (selectedRef.current.size > 0) {
         e.preventDefault()
@@ -945,6 +1097,10 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         const target = entries.find((x) => x.name === [...selectedRef.current][0])
         if (target) startRename(target)
       }
+    } else if (e.key === 'F4' || (mod && key === 'l')) {
+      // Windows 资源管理器风格：F4 / Ctrl+L 聚焦地址栏（面包屑切换为可编辑输入框）
+      e.preventDefault()
+      setAddr(cwd)
     } else if (e.key === 'Escape') {
       // 已由本组件处理（关闭右键菜单 / 取消选择），阻止全局 ESC 关闭窗口
       e.stopPropagation()
@@ -965,12 +1121,12 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       anchorRef.current = name
       updateSelected(next)
     } else if (e.shiftKey) {
-      // shift：从锚点行到本行连续选中
-      const a = anchorRef.current ? entries.findIndex((x) => x.name === anchorRef.current) : -1
-      const b = entries.findIndex((x) => x.name === name)
+      // shift：从锚点行到本行连续选中（按当前排序顺序）
+      const a = anchorRef.current ? sortedEntries.findIndex((x) => x.name === anchorRef.current) : -1
+      const b = sortedEntries.findIndex((x) => x.name === name)
       if (a >= 0 && b >= 0) {
         const next = new Set(cur)
-        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(entries[i].name)
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(sortedEntries[i].name)
         updateSelected(next)
       } else {
         updateSelected(new Set([name]))
@@ -1087,42 +1243,86 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         <button className="btn btn-sm btn-ghost" onClick={goUp} disabled={cwd === ROOT}>
           ↑
         </button>
-        <input
-          value={addr ?? cwd}
-          onChange={(e) => setAddr(e.target.value)}
-          onFocus={(e) => {
-            // 进入编辑时显示当前目录并全选（Windows 资源管理器风格）
-            setAddr(cwd)
-            e.target.select()
-          }}
-          onBlur={() => setAddr(null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              const v = normalizeAddr(addr ?? cwd)
-              setAddr(null)
-              if (v !== cwd) navTo(v)
-            } else if (e.key === 'Escape') {
-              setAddr(null)
+        {addr === null ? (
+          <div
+            className="fm-crumb"
+            title={
+              isWin
+                ? t('输入绝对路径后回车跳转（如 C:/Users），/ 查看盘符列表')
+                : t('输入绝对路径后回车跳转（如 /etc/nginx）')
             }
-          }}
-          spellCheck={false}
-          title={
-            isWin
-              ? t('输入绝对路径后回车跳转（如 C:/Users），/ 查看盘符列表')
-              : t('输入绝对路径后回车跳转（如 /etc/nginx）')
-          }
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: '5px 10px',
-            borderRadius: 6,
-            border: '1px solid rgba(var(--rgb-line),0.2)',
-            background: 'rgba(var(--rgb-appbg),0.5)',
-            fontFamily: 'Consolas, monospace',
-            color: 'var(--primary-light)',
-            outline: 'none',
-          }}
-        />
+            onClick={() => setAddr(cwd)}
+          >
+            {pathCrumbs(cwd, isWin, rootLabel).map((c, i, arr) => (
+              <Fragment key={c.path}>
+                {i > 0 && <span className="fm-crumb-sep">›</span>}
+                {i === arr.length - 1 ? (
+                  <span className="fm-crumb-current" title={c.path}>
+                    {c.label}
+                  </span>
+                ) : (
+                  <button
+                    className="fm-crumb-btn"
+                    title={c.path}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navTo(c.path)
+                    }}
+                  >
+                    {c.label}
+                  </button>
+                )}
+              </Fragment>
+            ))}
+            <span
+              className="fm-crumb-edit"
+              title={t('点击编辑路径')}
+              onClick={(e) => {
+                e.stopPropagation()
+                setAddr(cwd)
+              }}
+            >
+              ✏️
+            </span>
+          </div>
+        ) : (
+          <input
+            value={addr ?? cwd}
+            onChange={(e) => setAddr(e.target.value)}
+            onFocus={(e) => {
+              // 进入编辑时全选当前路径（Windows 资源管理器风格）
+              e.target.select()
+            }}
+            onBlur={() => setAddr(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = normalizeAddr(addr ?? cwd)
+                setAddr(null)
+                if (v !== cwd) navTo(v)
+              } else if (e.key === 'Escape') {
+                setAddr(null)
+              }
+            }}
+            spellCheck={false}
+            autoFocus
+            title={
+              isWin
+                ? t('输入绝对路径后回车跳转（如 C:/Users），/ 查看盘符列表')
+                : t('输入绝对路径后回车跳转（如 /etc/nginx）')
+            }
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: '5px 10px',
+              borderRadius: 6,
+              border: '1px solid rgba(var(--rgb-line),0.2)',
+              background: 'rgba(var(--rgb-appbg),0.5)',
+              fontFamily: 'Consolas, monospace',
+              color: 'var(--primary-light)',
+              outline: 'none',
+            }}
+          />
+        )}
         <button className="btn btn-sm btn-ghost" onClick={newFile}>
           {t('新建文档')}
         </button>
@@ -1283,7 +1483,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                 <span
                   style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
-                  {qaDisplay(p)}
+                  {p === ROOT ? rootLabel : qaDisplay(p)}
                 </span>
               </div>
             ))}
@@ -1292,6 +1492,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
 
         {/* 中：文件列表 */}
         <div
+          ref={listScrollRef}
           style={{ flex: 1, overflow: 'auto', minWidth: 0, position: 'relative' }}
           onPointerDown={onListPointerDown}
           onPointerMove={onListPointerMove}
@@ -1303,14 +1504,50 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ color: 'var(--text-1)', textAlign: 'left', fontSize: 12 }}>
-                  <th style={{ padding: '6px 10px' }}>{t('名称')}</th>
-                  <th style={{ padding: '6px 10px', width: 80 }}>{t('大小')}</th>
-                  <th style={{ padding: '6px 10px', width: 110 }}>{t('权限')}</th>
-                  <th style={{ padding: '6px 10px', width: 160 }}>{t('修改时间')}</th>
+                  <th style={{ padding: '6px 10px' }}>
+                    <button
+                      className="fm-sort-btn"
+                      onClick={() => onSortClick('name')}
+                      title={t('点击按名称排序')}
+                    >
+                      {t('名称')}
+                      {sort.key === 'name' ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </button>
+                  </th>
+                  <th style={{ padding: '6px 10px', width: 80 }}>
+                    <button
+                      className="fm-sort-btn"
+                      onClick={() => onSortClick('size')}
+                      title={t('点击按大小排序')}
+                    >
+                      {t('大小')}
+                      {sort.key === 'size' ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </button>
+                  </th>
+                  <th style={{ padding: '6px 10px', width: 110 }}>
+                    <button
+                      className="fm-sort-btn"
+                      onClick={() => onSortClick('mode')}
+                      title={t('点击按权限排序')}
+                    >
+                      {t('权限')}
+                      {sort.key === 'mode' ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </button>
+                  </th>
+                  <th style={{ padding: '6px 10px', width: 160 }}>
+                    <button
+                      className="fm-sort-btn"
+                      onClick={() => onSortClick('mtime')}
+                      title={t('点击按修改时间排序')}
+                    >
+                      {t('修改时间')}
+                      {sort.key === 'mtime' ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {sortedEntries.map((e) => (
                   <tr
                     key={e.name}
                     ref={(el) => {
@@ -1625,16 +1862,18 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                   {t('✏️ 编辑')}
                 </div>
               )}
-              <div
-                className="ctx-menu-item"
-                onClick={() => {
-                  if (ctx.qaPath) downloadPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
-                  else download(ctx.entry!)
-                  setCtx(null)
-                }}
-              >
-                {ctx.entry.is_dir ? t('📦 下载文件夹（tar.gz）') : t('⬇️ 下载')}
-              </div>
+              {!isRootQa && (
+                <div
+                  className="ctx-menu-item"
+                  onClick={() => {
+                    if (ctx.qaPath) downloadPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
+                    else download(ctx.entry!)
+                    setCtx(null)
+                  }}
+                >
+                  {ctx.entry.is_dir ? t('📦 下载文件夹（tar.gz）') : t('⬇️ 下载')}
+                </div>
+              )}
               {!ctx.entry.is_dir && isArchive(ctx.entry.name) && (
                 <div className="ctx-menu-item" onClick={() => { void doExtract(ctx.entry!); setCtx(null) }}>
                   {t('📦 解压缩')}
@@ -1649,59 +1888,63 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
               >
                 {t('📋 复制绝对路径')}
               </div>
-              <div className="ctx-menu-sep" />
-              <div
-                className="ctx-menu-item"
-                onClick={() => {
-                  if (ctx.qaPath) copyPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
-                  else copySelected()
-                  setCtx(null)
-                }}
-              >
-                {t('📄 复制{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
-              </div>
-              <div
-                className="ctx-menu-item"
-                onClick={() => {
-                  if (ctx.qaPath) cutPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
-                  else cutSelected()
-                  setCtx(null)
-                }}
-              >
-                {t('✂️ 剪切{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
-              </div>
-              <div
-                className="ctx-menu-item"
-                onClick={() => {
-                  if (ctx.qaPath) renameQa(ctx)
-                  else startRename(ctx.entry!)
-                  setCtx(null)
-                }}
-              >
-                {t('🔄 重命名')}
-              </div>
-              <div
-                className="ctx-menu-item"
-                onClick={() => {
-                  if (ctx.qaPath) void doChmodPath(ctx.qaPath, '755')
-                  else doChmod(ctx.entry!)
-                  setCtx(null)
-                }}
-              >
-                {t('🔐 权限')}
-              </div>
-              <div
-                className="ctx-menu-item"
-                style={{ color: 'var(--red)' }}
-                onClick={() => {
-                  if (ctx.qaPath) void deletePath(ctx.qaPath, qaDisplay(ctx.qaPath))
-                  else void deleteSelected()
-                  setCtx(null)
-                }}
-              >
-                {t('🗑 删除{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
-              </div>
-              {ctx.qaPath && (
+              {!isRootQa && (
+                <>
+                  <div className="ctx-menu-sep" />
+                  <div
+                    className="ctx-menu-item"
+                    onClick={() => {
+                      if (ctx.qaPath) copyPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
+                      else copySelected()
+                      setCtx(null)
+                    }}
+                  >
+                    {t('📄 复制{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
+                  </div>
+                  <div
+                    className="ctx-menu-item"
+                    onClick={() => {
+                      if (ctx.qaPath) cutPath(ctx.qaPath, qaDisplay(ctx.qaPath), true)
+                      else cutSelected()
+                      setCtx(null)
+                    }}
+                  >
+                    {t('✂️ 剪切{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
+                  </div>
+                  <div
+                    className="ctx-menu-item"
+                    onClick={() => {
+                      if (ctx.qaPath) renameQa(ctx)
+                      else startRename(ctx.entry!)
+                      setCtx(null)
+                    }}
+                  >
+                    {t('🔄 重命名')}
+                  </div>
+                  <div
+                    className="ctx-menu-item"
+                    onClick={() => {
+                      if (ctx.qaPath) void doChmodPath(ctx.qaPath, '755')
+                      else doChmod(ctx.entry!)
+                      setCtx(null)
+                    }}
+                  >
+                    {t('🔐 权限')}
+                  </div>
+                  <div
+                    className="ctx-menu-item"
+                    style={{ color: 'var(--red)' }}
+                    onClick={() => {
+                      if (ctx.qaPath) void deletePath(ctx.qaPath, qaDisplay(ctx.qaPath))
+                      else void deleteSelected()
+                      setCtx(null)
+                    }}
+                  >
+                    {t('🗑 删除{0}', !ctx.qaPath && selected.size > 1 ? t('（{0} 项）', selected.size) : '')}
+                  </div>
+                </>
+              )}
+              {ctx.qaPath && !isRootQa && (
                 <>
                   <div className="ctx-menu-sep" />
                   <div
@@ -1952,6 +2195,11 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
             >
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {player.kind === 'image' ? '🖼️' : '🎬'} {player.name}
+                {player.kind === 'image' && imageEntries.length > 1 && (
+                  <span style={{ color: 'var(--text-1)', fontSize: 12, marginLeft: 8 }}>
+                    {imageEntries.findIndex((x) => x.name === player.name) + 1} / {imageEntries.length}
+                  </span>
+                )}
               </span>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {player.kind === 'image' && (
@@ -2032,6 +2280,26 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                   autoPlay
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
+              )}
+
+              {/* 图片模式下：左右箭头切换上一张/下一张 */}
+              {player.kind === 'image' && imageEntries.length > 1 && (
+                <>
+                  <button
+                    className="player-nav player-nav-left"
+                    title={t('上一张')}
+                    onClick={() => navImage(-1)}
+                  >
+                    ‹
+                  </button>
+                  <button
+                    className="player-nav player-nav-right"
+                    title={t('下一张')}
+                    onClick={() => navImage(1)}
+                  >
+                    ›
+                  </button>
+                </>
               )}
             </div>
           </div>

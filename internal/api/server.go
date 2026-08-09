@@ -120,6 +120,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/sftp/paste", s.requireAuth(s.handleSftpPaste))
 	mux.HandleFunc("POST /api/hosts/{id}/sftp/extract", s.requireAuth(s.handleSftpExtract))
 
+	// 文件管理器：快速访问（后端持久化，按服务器隔离）
+	mux.HandleFunc("GET /api/hosts/{id}/quick-access", s.requireAuth(s.handleGetQuickAccess))
+	mux.HandleFunc("PUT /api/hosts/{id}/quick-access", s.requireAuth(s.handleSaveQuickAccess))
+
 	// 一键命令：保存的命令 CRUD
 	mux.HandleFunc("GET /api/commands", s.requireAuth(s.handleListCommands))
 	mux.HandleFunc("POST /api/commands", s.requireAuth(s.handleCreateCommand))

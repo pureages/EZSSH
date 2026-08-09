@@ -16,7 +16,7 @@ import (
 // version 为 EZSSH 网关版本号，可通过构建参数覆盖：
 //
 //	go build -ldflags "-X main.version=x.y.z"
-var version = "0.0.5-2"
+var version = "0.0.6"
 
 func getenv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -26,7 +26,7 @@ func getenv(key, def string) string {
 }
 
 func main() {
-	listen := getenv("EZSSH_LISTEN", "127.0.0.1")
+	listen := getenv("EZSSH_LISTEN", "0.0.0.0")
 	port := getenv("EZSSH_PORT", "49466")
 	dir := dataDir()
 	// 数据库路径：EZSSH_DB 显式指定则用之，否则默认落在数据目录下

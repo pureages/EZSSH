@@ -1,6 +1,6 @@
 # EZSSH User Guide
 
-A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.5-2 · Updated 2026-08-04
+A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.6 · Updated 2026-08-09
 
 ## Table of Contents
 
@@ -71,7 +71,7 @@ go build -buildvcs=false ./cmd/ezssh
 cd web && npm install && npm run build
 ```
 
-Listens on `127.0.0.1:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
+Listens on `0.0.0.0:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
 
 <a id="s3"></a>
 ## 3. Web Desktop Usage
@@ -148,7 +148,7 @@ On the Windows server to be added, run the following commands in PowerShell as A
 
 | Variable | Default | Description |
 |---|---|---|
-| `EZSSH_LISTEN` | `127.0.0.1` | Listen address |
+| `EZSSH_LISTEN` | `0.0.0.0` | Listen address |
 | `EZSSH_PORT` | `49466` | Listen port |
 | `EZSSH_DATA` | `data` | Data directory (all persistent data including the database) |
 | `EZSSH_DB` | `data/ezssh.db` | SQLite database path (takes priority if explicitly set) |
@@ -164,7 +164,7 @@ On the Windows server to be added, run the following commands in PowerShell as A
 <a id="s6-3"></a>
 ### 6.3 Public Deployment Recommendations
 
-> **Warning**: the default listen address is 127.0.0.1. For public deployments it is strongly recommended to place EZSSH behind Caddy / Nginx and enable HTTPS; do not expose raw HTTP to the public internet.
+> **Warning**: the default listen address is `0.0.0.0`, which exposes the gateway to all network interfaces. For public deployments it is strongly recommended to place EZSSH behind Caddy / Nginx and enable HTTPS, and do not expose raw HTTP to the public internet. Set `EZSSH_LISTEN=127.0.0.1` for local-only access.
 
 ---
 

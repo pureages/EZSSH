@@ -78,7 +78,14 @@ CREATE TABLE IF NOT EXISTS saved_commands (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
   command    TEXT NOT NULL,
+  host_id    TEXT NOT NULL DEFAULT '', -- 绑定到的服务器（hosts.id）；''= 未绑定
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quick_access (
+  host_id    TEXT PRIMARY KEY,         -- 服务器（hosts.id），快速访问按服务器隔离
+  paths      TEXT NOT NULL DEFAULT '[]', -- JSON 数组：用户添加的快速访问路径（不含默认根目录）
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -161,6 +168,14 @@ CREATE TABLE IF NOT EXISTS dns_accounts (
 		}
 	}
 	_, err = s.db.Exec(`ALTER TABLE hosts ADD COLUMN builtin INTEGER NOT NULL DEFAULT 0`)
+	if err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") &&
+			!strings.Contains(err.Error(), "already exists") {
+			return err
+		}
+	}
+	// 兼容旧库：为一键命令添加「绑定服务器」列
+	_, err = s.db.Exec(`ALTER TABLE saved_commands ADD COLUMN host_id TEXT NOT NULL DEFAULT ''`)
 	if err != nil {
 		if !strings.Contains(err.Error(), "duplicate column") &&
 			!strings.Contains(err.Error(), "already exists") {

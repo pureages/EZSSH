@@ -253,6 +253,14 @@ export const enDict: Record<string, string> = {
   '直连依赖源机执行 scp+sshpass（POSIX 链路），Windows 主机不可用，请用「中转」': 'Direct paste requires scp+sshpass on the source host (POSIX only). Not available on Windows — use relay instead.',
   '输入绝对路径后回车跳转（如 C:/Users），/ 查看盘符列表': 'Enter an absolute path and press Enter (e.g. C:/Users). "/" lists drives.',
   '输入绝对路径后回车跳转（如 /etc/nginx）': 'Enter an absolute path and press Enter (e.g. /etc/nginx).',
+  此电脑: 'This PC',
+  点击编辑路径: 'Click to edit path',
+  上一张: 'Previous',
+  下一张: 'Next',
+  点击按名称排序: 'Sort by name',
+  点击按大小排序: 'Sort by size',
+  点击按权限排序: 'Sort by permissions',
+  点击按修改时间排序: 'Sort by modified time',
   '终端（安装 sshpass）': 'Terminal (install sshpass)',
 
   // ===== Docker =====
@@ -482,6 +490,10 @@ export const enDict: Record<string, string> = {
   '执行中…': 'Running…',
   后台执行: '🔄 Run in Background',
   前台执行: '⚡ Run in Foreground',
+  绑定服务器: 'Bind Server',
+  '不绑定（可在任意服务器执行）': 'Not bound (can run on any server)',
+  绑定后该命令只能在指定服务器上执行: 'Once bound, this command can only run on the specified server.',
+  '该命令已绑定到服务器「{0}」，仅可在该服务器上执行': 'This command is bound to server "{0}" and can only run there.',
   '输出日志：{0}（PID {1}）': '📄 Output Log · {0} (PID {1})',
   '（无输出）': ' (no output)',
 

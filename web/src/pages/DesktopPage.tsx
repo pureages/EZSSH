@@ -784,6 +784,16 @@ export function DesktopPage() {
           <div className="ctx-menu-sep" />
           <div
             className="ctx-menu-item"
+            onClick={() => {
+              openApp('oneclick', null)
+              setIconMenu(null)
+            }}
+          >
+            {appRegistry.find((a) => a.id === 'oneclick')?.icon} {t('一键命令')}
+          </div>
+          <div className="ctx-menu-sep" />
+          <div
+            className="ctx-menu-item"
             onClick={() => openEditHost(iconMenu.host)}
           >
             {t('✏️ 编辑')}

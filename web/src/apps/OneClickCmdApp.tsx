@@ -18,14 +18,21 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
   const [hosts, setHosts] = useState<Host[]>([])
   const [cmds, setCmds] = useState<SavedCommand[]>([])
 
+  /** 服务器 id → 名称（用于展示命令绑定） */
+  const hostNameOf = (id: string) => hosts.find((h) => h.id === id)?.name ?? id
+
   // 命令编辑表单
   const [cmdName, setCmdName] = useState('')
   const [cmdText, setCmdText] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
+  /** 命令绑定的服务器 id（'' = 未绑定，可在任意服务器执行） */
+  const [cmdHost, setCmdHost] = useState('')
 
   // 执行对话框
   const [execOpen, setExecOpen] = useState(false)
   const [execCommand, setExecCommand] = useState('')
+  /** 执行时命令绑定的服务器（'' = 未绑定，可自由选择多台）；绑定后仅允许在该服务器上执行 */
+  const [execBound, setExecBound] = useState('')
   const [selHosts, setSelHosts] = useState<Set<string>>(new Set())
   const [execMode, setExecMode] = useState<'fg' | 'bg'>('fg')
   const [execBusy, setExecBusy] = useState(false)
@@ -87,10 +94,11 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
     }
     setErr('')
     try {
-      if (editingId != null) await api.updateCommand(editingId, name, command)
-      else await api.createCommand(name, command)
+      if (editingId != null) await api.updateCommand(editingId, name, command, cmdHost)
+      else await api.createCommand(name, command, cmdHost)
       setCmdName('')
       setCmdText('')
+      setCmdHost('')
       setEditingId(null)
       await loadCmds()
     } catch (e) {
@@ -102,6 +110,7 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
     setEditingId(c.id)
     setCmdName(c.name)
     setCmdText(c.command)
+    setCmdHost(c.host_id ?? '')
     setErr('')
   }
 
@@ -109,6 +118,7 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
     setEditingId(null)
     setCmdName('')
     setCmdText('')
+    setCmdHost('')
     setErr('')
   }
 
@@ -123,10 +133,11 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
     }
   }
 
-  const openExec = (command: string) => {
+  const openExec = (command: string, hostId = '') => {
     setExecCommand(command)
     setExecResult(null)
-    setSelHosts(new Set())
+    setExecBound(hostId)
+    setSelHosts(hostId ? new Set([hostId]) : new Set())
     setErr('')
     setExecOpen(true)
   }
@@ -141,7 +152,8 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
   }
 
   const doExec = async () => {
-    const ids = [...selHosts]
+    // 绑定服务器的命令：仅允许在该服务器上执行
+    const ids = execBound ? [execBound] : [...selHosts]
     if (ids.length === 0) {
       setErr(t('至少选择一台服务器'))
       return
@@ -290,6 +302,33 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
                   </button>
                 )}
               </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
+                  {t('绑定服务器')}
+                </span>
+                <select
+                  value={cmdHost}
+                  onChange={(e) => setCmdHost(e.target.value)}
+                  title={t('绑定后该命令只能在指定服务器上执行')}
+                  style={{
+                    flex: 1,
+                    maxWidth: 360,
+                    padding: '7px 10px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(var(--rgb-line),0.3)',
+                    background: 'rgba(0,0,0,0.25)',
+                    color: 'var(--text-0)',
+                    fontSize: 13,
+                  }}
+                >
+                  <option value="">{t('不绑定（可在任意服务器执行）')}</option>
+                  {hosts.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}（{h.username}@{h.host}）
+                    </option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 value={cmdText}
                 onChange={(e) => setCmdText(e.target.value)}
@@ -342,7 +381,26 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
                   <tbody>
                     {cmds.map((c) => (
                       <tr key={c.id} style={{ borderBottom: '1px solid rgba(var(--rgb-line),0.1)' }}>
-                        <td style={{ padding: '7px 8px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name}</td>
+                        <td style={{ padding: '7px 8px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {c.name}
+                          {c.host_id && (
+                            <span
+                              title={t('该命令已绑定到服务器「{0}」，仅可在该服务器上执行', hostNameOf(c.host_id))}
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 11,
+                                padding: '1px 7px',
+                                borderRadius: 4,
+                                background: 'rgba(var(--rgb-primary),0.15)',
+                                color: 'var(--primary-light)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              🔒 {hostNameOf(c.host_id)}
+                            </span>
+                          )}
+                        </td>
                         <td
                           style={{
                             padding: '7px 8px',
@@ -360,7 +418,7 @@ export function OneClickCmdApp({ onTitle }: AppProps) {
                         </td>
                         <td style={{ padding: '7px 8px', color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{fmtTime(c.updated_at)}</td>
                         <td style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>
-                          <button className="btn btn-sm" onClick={() => openExec(c.command)}>
+                          <button className="btn btn-sm" onClick={() => openExec(c.command, c.host_id ?? '')}>
                             ⚡ {t('执行')}
                           </button>
                           <button className="btn btn-sm btn-ghost" style={{ marginLeft: 6 }} onClick={() => editCommand(c)}>

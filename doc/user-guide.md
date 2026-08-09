@@ -1,6 +1,6 @@
 # EZSSH 用户使用手册
 
-干净、高效、可视化的自托管中心化 SSH Web 网关 · 版本 v0.0.5-2 · 更新日期 2026-08-04
+干净、高效、可视化的自托管中心化 SSH Web 网关 · 版本 v0.0.6 · 更新日期 2026-08-09
 
 ## 目录
 
@@ -72,7 +72,7 @@ go build -buildvcs=false ./cmd/ezssh
 cd web && npm install && npm run build
 ```
 
-默认监听 `127.0.0.1:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
+默认监听 `0.0.0.0:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
 
 <a id="s3"></a>
 ## 3. Web 桌面使用
@@ -149,7 +149,7 @@ cd web && npm install && npm run build
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `EZSSH_LISTEN` | `127.0.0.1` | 监听地址 |
+| `EZSSH_LISTEN` | `0.0.0.0` | 监听地址 |
 | `EZSSH_PORT` | `49466` | 监听端口 |
 | `EZSSH_DATA` | `data` | 数据目录（数据库等所有持久化数据） |
 | `EZSSH_DB` | `data/ezssh.db` | SQLite 文件路径（显式指定则优先） |
@@ -165,7 +165,7 @@ cd web && npm install && npm run build
 <a id="s6-3"></a>
 ### 6.3 公网部署建议
 
-> **警告**：默认监听 127.0.0.1。公网部署强烈建议置于 Caddy / Nginx 之后并启用 HTTPS；不要直接暴露裸 HTTP 到公网。
+> **警告**：默认监听 `0.0.0.0`，会暴露到所有网卡。公网部署强烈建议置于 Caddy / Nginx 之后并启用 HTTPS，且不要直接暴露裸 HTTP 到公网；如需仅本机访问，可设 `EZSSH_LISTEN=127.0.0.1`。
 
 ---
 

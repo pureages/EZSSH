@@ -440,18 +440,27 @@ export const api = {
 
   // ---- 一键命令：保存的命令 ----
   listCommands: () => request<SavedCommand[]>('/api/commands'),
-  createCommand: (name: string, command: string) =>
+  createCommand: (name: string, command: string, hostId = '') =>
     request<SavedCommand>('/api/commands', {
       method: 'POST',
-      body: JSON.stringify({ name, command }),
+      body: JSON.stringify({ name, command, host_id: hostId }),
     }),
-  updateCommand: (id: number, name: string, command: string) =>
+  updateCommand: (id: number, name: string, command: string, hostId = '') =>
     request<SavedCommand>(`/api/commands/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ name, command }),
+      body: JSON.stringify({ name, command, host_id: hostId }),
     }),
   deleteCommand: (id: number) =>
     request<{ ok: string }>(`/api/commands/${id}`, { method: 'DELETE' }),
+
+  // ---- 文件管理器：快速访问（后端持久化，跨浏览器同步） ----
+  quickAccessGet: (id: string) =>
+    request<{ paths: string[] }>(`/api/hosts/${id}/quick-access`),
+  quickAccessPut: (id: string, paths: string[]) =>
+    request<{ ok: string }>(`/api/hosts/${id}/quick-access`, {
+      method: 'PUT',
+      body: JSON.stringify({ paths }),
+    }),
 
   // ---- 一键命令：后台长期运行任务 ----
   backgroundStart: (hostIds: string[], command: string) =>

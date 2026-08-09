@@ -7,13 +7,14 @@ type SavedCommand struct {
 	ID        int64
 	Name      string
 	Command   string
+	HostID    string // 绑定到的服务器（hosts.id）；'' = 未绑定
 	CreatedAt string
 	UpdatedAt string
 }
 
 func scanCommand(row interface{ Scan(...any) error }) (*SavedCommand, error) {
 	c := &SavedCommand{}
-	err := row.Scan(&c.ID, &c.Name, &c.Command, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.Name, &c.Command, &c.HostID, &c.CreatedAt, &c.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -23,7 +24,7 @@ func scanCommand(row interface{ Scan(...any) error }) (*SavedCommand, error) {
 	return c, nil
 }
 
-const commandCols = `id, name, command, created_at, updated_at`
+const commandCols = `id, name, command, host_id, created_at, updated_at`
 
 func (s *Store) ListCommands() ([]SavedCommand, error) {
 	rows, err := s.db.Query(`SELECT ` + commandCols + ` FROM saved_commands ORDER BY name`)
@@ -49,10 +50,10 @@ func (s *Store) GetCommand(id int64) (*SavedCommand, error) {
 }
 
 // CreateCommand 插入命令并回读（含默认时间戳）。name 冲突返回 SQLite UNIQUE 错误。
-func (s *Store) CreateCommand(name, command string) (*SavedCommand, error) {
+func (s *Store) CreateCommand(name, command, hostID string) (*SavedCommand, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO saved_commands (name, command) VALUES (?,?)`,
-		name, command,
+		`INSERT INTO saved_commands (name, command, host_id) VALUES (?,?,?)`,
+		name, command, hostID,
 	)
 	if err != nil {
 		return nil, err
@@ -64,11 +65,11 @@ func (s *Store) CreateCommand(name, command string) (*SavedCommand, error) {
 	return s.GetCommand(id)
 }
 
-// UpdateCommand 更新名称与命令并回读；name 冲突返回 SQLite UNIQUE 错误。
-func (s *Store) UpdateCommand(id int64, name, command string) (*SavedCommand, error) {
+// UpdateCommand 更新名称、命令与绑定服务器并回读；name 冲突返回 SQLite UNIQUE 错误。
+func (s *Store) UpdateCommand(id int64, name, command, hostID string) (*SavedCommand, error) {
 	_, err := s.db.Exec(
-		`UPDATE saved_commands SET name=?, command=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		name, command, id,
+		`UPDATE saved_commands SET name=?, command=?, host_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		name, command, hostID, id,
 	)
 	if err != nil {
 		return nil, err

@@ -41,7 +41,7 @@ func (c *Config) StartServer() (int, error) {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Env = append(os.Environ(),
-		"EZSSH_LISTEN=127.0.0.1",
+		"EZSSH_LISTEN=0.0.0.0",
 		"EZSSH_PORT="+strconv.Itoa(c.Port),
 		"EZSSH_DATA="+c.DataDir,
 		"EZSSH_WEB="+webDir(c),

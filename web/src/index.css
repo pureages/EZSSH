@@ -487,7 +487,6 @@ body,
   font-family: Consolas, Menlo, monospace;
   font-weight: 600;
   color: #7dd3fc;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   letter-spacing: 0.3px;
   display: flex;
   flex-direction: column;
@@ -1270,7 +1269,6 @@ body,
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .mon-preview-line {
@@ -1832,6 +1830,108 @@ button,
 }
 .qa-item.active {
   background: rgba(var(--rgb-primary), 0.16);
+}
+
+/* 地址栏面包屑（Windows 资源管理器风格）：每段目录都是一个可点击按钮 */
+.fm-crumb {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: text;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fm-crumb-sep {
+  color: var(--text-2);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.fm-crumb-btn {
+  border: none;
+  background: none;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-0);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.fm-crumb-btn:hover {
+  background: rgba(var(--rgb-primary), 0.12);
+  color: var(--primary-light);
+}
+.fm-crumb-current {
+  padding: 2px 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-light);
+  flex-shrink: 0;
+}
+.fm-crumb-edit {
+  margin-left: auto;
+  padding: 2px 4px;
+  font-size: 12px;
+  opacity: 0.45;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.fm-crumb-edit:hover {
+  opacity: 1;
+}
+
+/* 文件列表列头排序按钮（点击切换顺序/倒序） */
+.fm-sort-btn {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.fm-sort-btn:hover {
+  background: rgba(var(--rgb-primary), 0.12);
+  color: var(--primary-light);
+}
+
+/* 全屏播放器：上一张/下一张 切换按钮（悬停浮现，图片模式） */
+.player-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, opacity 0.15s;
+  opacity: 0.55;
+}
+.player-nav:hover {
+  background: rgba(0, 0, 0, 0.72);
+  opacity: 1;
+}
+.player-nav-left {
+  left: 14px;
+}
+.player-nav-right {
+  right: 14px;
 }
 
 /* 行内重命名输入框 */

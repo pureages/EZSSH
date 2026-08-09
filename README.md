@@ -2,7 +2,7 @@
 
 > [English](README.en.md) | 简体中文
 
-版本：v0.0.5-2
+版本：v0.0.6
 
 **原生 SSH / SFTP 驱动的轻量干净、可视化的服务器 / VPS 自托管中心化 Web 网关，GO 驱动**，服务器无需任何 Agent，安全可控。
 
@@ -65,7 +65,7 @@ go build -buildvcs=false ./cmd/ezssh
 cd web && npm install && npm run build
 ```
 
-默认监听 `127.0.0.1:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
+默认监听 `0.0.0.0:49466`（可用环境变量 `EZSSH_LISTEN` / `EZSSH_PORT` 覆盖）。
 
 
 ## License

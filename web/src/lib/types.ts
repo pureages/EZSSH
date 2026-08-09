@@ -137,6 +137,8 @@ export interface SavedCommand {
   id: number
   name: string
   command: string
+  /** 绑定到的服务器 id（'' = 未绑定，可在任意服务器执行） */
+  host_id: string
   created_at: string
   updated_at: string
 }

@@ -12,12 +12,13 @@ type commandDTO struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	Command   string `json:"command"`
+	HostID    string `json:"host_id"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
 
 func toCommandDTO(c *store.SavedCommand) commandDTO {
-	return commandDTO{ID: c.ID, Name: c.Name, Command: c.Command, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+	return commandDTO{ID: c.ID, Name: c.Name, Command: c.Command, HostID: c.HostID, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 // isUniqueErr 判断 SQLite UNIQUE 冲突（命令重名）。
@@ -44,6 +45,7 @@ func (s *Server) handleCreateCommand(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name    string `json:"name"`
 		Command string `json:"command"`
+		HostID  string `json:"host_id"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body")
@@ -59,7 +61,7 @@ func (s *Server) handleCreateCommand(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "命令内容不能为空")
 		return
 	}
-	c, err := s.st.CreateCommand(name, command)
+	c, err := s.st.CreateCommand(name, command, strings.TrimSpace(req.HostID))
 	if err != nil {
 		if isUniqueErr(err) {
 			writeErr(w, http.StatusBadRequest, "命令名已存在")
@@ -82,6 +84,7 @@ func (s *Server) handleUpdateCommand(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name    string `json:"name"`
 		Command string `json:"command"`
+		HostID  string `json:"host_id"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body")
@@ -97,7 +100,7 @@ func (s *Server) handleUpdateCommand(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "命令内容不能为空")
 		return
 	}
-	c, err := s.st.UpdateCommand(id, name, command)
+	c, err := s.st.UpdateCommand(id, name, command, strings.TrimSpace(req.HostID))
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeErr(w, http.StatusNotFound, "not found")

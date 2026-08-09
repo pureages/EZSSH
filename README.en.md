@@ -2,7 +2,7 @@
 
 > English | [简体中文](README.md)
 
-Version: v0.0.5-2
+Version: v0.0.6
 
 **A lightweight, clean, visualized, native SSH / SFTP-driven, self-hosted centralized web gateway for servers / VPS, powered by Go** — no Agent required on servers, safe and controllable.
 
@@ -64,7 +64,7 @@ go build -buildvcs=false ./cmd/ezssh
 cd web && npm install && npm run build
 ```
 
-Listens on `127.0.0.1:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
+Listens on `0.0.0.0:49466` by default (overridable via the `EZSSH_LISTEN` / `EZSSH_PORT` environment variables).
 
 ## License
 
