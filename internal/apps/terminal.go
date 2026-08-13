@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sync"
@@ -26,6 +27,8 @@ type TerminalManager struct {
 type termSession struct {
 	session *ssh.Session
 	stdin   io.WriteCloser
+	// 是否为 Windows 主机（Open 时探测一次缓存），用于 stdin 行尾归一
+	isWindows bool
 }
 
 func NewTerminalManager(hub *sshhub.Hub) *TerminalManager {
@@ -82,7 +85,8 @@ func (tm *TerminalManager) Open(hostID, channelID string, cols, rows int, onOutp
 		sess.Close()
 		return fmt.Errorf("request pty: %w", err)
 	}
-	if tm.isWindows(hostID) {
+	isWin := tm.isWindows(hostID)
+	if isWin {
 		// Windows 主机强制进入 PowerShell（Win7+ 自带）；不走 Shell() 以免落到默认 cmd。
 		if err := sess.Start("powershell -NoLogo"); err != nil {
 			sess.Close()
@@ -95,7 +99,7 @@ func (tm *TerminalManager) Open(hostID, channelID string, cols, rows int, onOutp
 		}
 	}
 
-	tm.sessions[channelID] = &termSession{session: sess, stdin: stdin}
+	tm.sessions[channelID] = &termSession{session: sess, stdin: stdin, isWindows: isWin}
 
 	// stdout 与 stderr 合并转发
 	go func() {
@@ -135,8 +139,33 @@ func (tm *TerminalManager) Write(channelID string, data []byte) error {
 	if !ok {
 		return fmt.Errorf("channel %s not open", channelID)
 	}
+	if ts.isWindows {
+		// Windows 控制台（PowerShell/cmd 行输入）只把 \r 识别为回车提交命令，
+		// 裸 \n 只会被当作普通字符、命令无法自动回车执行。把 \n 归一为 \r，
+		// 保证一键命令注入、右键粘贴等带 \n 的输入在 Windows 上也能直接执行。
+		data = normalizeWinInput(data)
+	}
 	_, err := ts.stdin.Write(data)
 	return err
+}
+
+// normalizeWinInput 把裸 \n 归一为 \r（保留已有 \r\n 为一个回车）。
+func normalizeWinInput(data []byte) []byte {
+	if !bytes.Contains(data, []byte{'\n'}) {
+		return data
+	}
+	out := make([]byte, 0, len(data))
+	for i, b := range data {
+		if b == '\n' {
+			// \r\n 已含回车：保留 \r、丢弃 \n；裸 \n 替换为 \r
+			if i > 0 && data[i-1] == '\r' {
+				continue
+			}
+			b = '\r'
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 // Resize 同步 pty 尺寸。

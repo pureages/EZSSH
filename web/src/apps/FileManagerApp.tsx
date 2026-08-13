@@ -1850,6 +1850,9 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
               <div className="ctx-menu-item" onClick={() => { void openTerminalHere(); setCtx(null) }}>
                 {t('🖥️ 打开终端')}
               </div>
+              <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
+                {t('🔄 刷新')}
+              </div>
             </>
           )}
           {ctx.entry && (

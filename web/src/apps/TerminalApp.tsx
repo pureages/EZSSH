@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -41,15 +41,58 @@ function copyFallback(text: string) {
 }
 
 /**
+ * 粘贴降级：非安全上下文（http 访问）下无 Clipboard API，
+ * 聚焦隐藏 textarea 后尝试 execCommand('paste')，通过 capture 阶段
+ * 的 paste 事件读取剪贴板文本。execCommand('paste') 被浏览器禁用时
+ * 会返回 false，此时回调空串，由调用方提示用户手动 Ctrl+V。
+ */
+function pasteFallback(onText: (text: string) => void) {
+  const ta = document.createElement('textarea')
+  ta.style.position = 'fixed'
+  ta.style.left = '-9999px'
+  ta.style.top = '0'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  let settled = false
+  const settle = (ok: boolean) => {
+    if (settled) return
+    settled = true
+    window.removeEventListener('paste', onPaste, true)
+    ta.remove()
+    if (!ok) onText('')
+  }
+  const onPaste = (e: ClipboardEvent) => {
+    const text = e.clipboardData?.getData('text/plain') ?? ''
+    settle(true)
+    onText(text)
+  }
+  window.addEventListener('paste', onPaste, true)
+  ta.focus()
+  try {
+    if (!document.execCommand('paste')) settle(false)
+  } catch {
+    settle(false)
+  }
+}
+
+/**
  * 终端 App：xterm.js + WebSocket 与后端 SSH shell 双向打通。
  */
-export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
+export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps) {
   const t = useT()
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const channelIdRef = useRef(channelId || newChannelId())
   const hostIdRef = useRef(hostId)
+  // 顶部居中的临时提示（复制/粘贴结果反馈）
+  const [toastMsg, setToastMsg] = useState('')
+  const toastTimerRef = useRef<number | null>(null)
+  const toast = (msg: string) => {
+    setToastMsg(msg)
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToastMsg(''), 1800)
+  }
 
   /** 终端右键（Linux 习惯）：有选区 → 复制选中文本并清空选区；无选区 → 粘贴剪贴板内容 */
   const handleTermContextMenu = (e: React.MouseEvent) => {
@@ -58,18 +101,37 @@ export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
     if (!term) return
     if (term.hasSelection()) {
       const text = term.getSelection()
-      navigator.clipboard.writeText(text).catch(() => copyFallback(text))
+      const done = () => toast(t('已复制'))
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {
+          copyFallback(text)
+          done()
+        })
+      } else {
+        copyFallback(text)
+        done()
+      }
       term.clearSelection()
     } else {
-      navigator.clipboard
-        .readText()
-        .then((text) => {
-          const tm = termRef.current
-          if (text && tm) tm.paste(text)
-        })
-        .catch(() => {
-          /* 剪贴板不可用（非安全上下文等），静默 */
-        })
+      const target = (text: string) => {
+        const tm = termRef.current
+        if (!tm) return
+        if (text) {
+          tm.paste(text)
+          tm.focus()
+          toast(t('已粘贴'))
+        } else {
+          toast(t('无法读取剪贴板，请按 Ctrl+V 粘贴'))
+        }
+      }
+      if (navigator.clipboard?.readText) {
+        navigator.clipboard
+          .readText()
+          .then(target)
+          .catch(() => toast(t('无法读取剪贴板，请按 Ctrl+V 粘贴')))
+      } else {
+        pasteFallback(target)
+      }
     }
   }
 
@@ -104,13 +166,56 @@ export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
       }
       if (disposed) return
 
+      // 消费启动上下文（文件管理器打开终端 cd / 一键命令注入）
+      const init = consumePendingTerminalCwd(hostIdRef.current ?? '')
+      const isWin = platform === 'windows'
+
+      // 初始命令注入：等 shell 就绪（收到首次输出）后再写，规避 Windows
+      // ConPTY 在启动期收到突发输入时回显乱序/倒序的问题；超时兜底。
+      let injected = false
+      let injectTimer: number | undefined
+      const injectInit = () => {
+        if (injected || disposed) return
+        injected = true
+        if (injectTimer) window.clearTimeout(injectTimer)
+        if (!init.cwd && !init.command) return
+        // 首屏输出渲染稳定后再写，避免与控制台初始化竞争
+        injectTimer = window.setTimeout(() => {
+          if (disposed) return
+          const parts: string[] = []
+          if (init.cwd && init.cwd !== '/') {
+            // Windows PowerShell 5.1 不支持 && / clear，仅 cd + \r
+            parts.push(
+              isWin
+                ? `cd ${JSON.stringify(init.cwd)}\r`
+                : `cd ${JSON.stringify(init.cwd)} && clear\n`,
+            )
+          }
+          if (init.command) {
+            // Windows 控制台只把 \r 识别为回车提交命令，\n 不会提交
+            parts.push(isWin ? `${init.command}\r` : `${init.command}\n`)
+          }
+          if (parts.length) {
+            ws.send('terminal.input', cid, {
+              data: b64encode(new TextEncoder().encode(parts.join(''))),
+            })
+          }
+        }, isWin ? 350 : 80)
+      }
+      const onFirstOutput = () => injectInit()
+      // 超时兜底：shell 无输出（静默 shell / 启动极慢）时也强制注入
+      injectTimer = window.setTimeout(injectInit, isWin ? 5000 : 2000)
+
       // 订阅该 channel 的消息
       const unsub = ws.onChannel(cid, (msg) => {
         if (disposed) return
         switch (msg.type) {
           case 'terminal.output': {
             const raw = msg.payload?.data as string
-            if (raw) term.write(b64decode(raw))
+            if (raw) {
+              term.write(b64decode(raw))
+              onFirstOutput()
+            }
             break
           }
           case 'terminal.exit': {
@@ -137,26 +242,6 @@ export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
         cols: term.cols,
         rows: term.rows,
       })
-
-      // 若由文件管理器打开，自动 cd 到其所在目录，并可自动执行初始命令
-      const init = consumePendingTerminalCwd(hostIdRef.current ?? '')
-      if (init.cwd && init.cwd !== '/') {
-        setTimeout(() => {
-          if (disposed) return
-          const cmd = `cd ${JSON.stringify(init.cwd)} && clear\n`
-          ws.send('terminal.input', cid, {
-            data: b64encode(new TextEncoder().encode(cmd)),
-          })
-        }, 500)
-      }
-      if (init.command) {
-        setTimeout(() => {
-          if (disposed) return
-          ws.send('terminal.input', cid, {
-            data: b64encode(new TextEncoder().encode(init.command + '\n')),
-          })
-        }, 900)
-      }
 
       // 输入透传（base64）
       const dataDisposable = term.onData((d) => {
@@ -189,6 +274,7 @@ export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
 
       // 清理函数
       const cleanup = () => {
+        if (injectTimer) window.clearTimeout(injectTimer)
         clearInterval(ping)
         dataDisposable.dispose()
         resizeDisposable.dispose()
@@ -239,5 +325,35 @@ export function TerminalApp({ windowId, hostId, channelId }: AppProps) {
     return () => ro.disconnect()
   }, [])
 
-  return <div ref={containerRef} className="terminal-container" onContextMenu={handleTermContextMenu} />
+  return (
+    <div
+      ref={containerRef}
+      className="terminal-container"
+      style={{ position: 'relative' }}
+      onContextMenu={handleTermContextMenu}
+    >
+      {toastMsg && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '6px 14px',
+            borderRadius: 6,
+            background: 'rgba(30,41,59,0.94)',
+            border: '1px solid rgba(148,163,184,0.35)',
+            color: '#e2e8f0',
+            fontSize: 12.5,
+            zIndex: 10,
+            pointerEvents: 'none',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {toastMsg}
+        </div>
+      )}
+    </div>
+  )
 }
