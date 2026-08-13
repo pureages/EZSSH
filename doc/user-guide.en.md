@@ -1,6 +1,6 @@
 # EZSSH User Guide
 
-A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.6 · Updated 2026-08-09
+A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.6-1 · Updated 2026-08-09
 
 ## Table of Contents
 
