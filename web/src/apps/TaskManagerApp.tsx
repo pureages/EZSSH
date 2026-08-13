@@ -46,6 +46,7 @@ interface HardwareInfo {
   hypervisor: string
   productName: string
   vendor: string
+  gpu?: { name: string; memory?: string; driver?: string }[]
 }
 
 const MAX_POINTS = 60
@@ -186,7 +187,7 @@ function TrendChart({ time, series, height = 190 }: { time: string[]; series: Tr
 
 // ---- 硬件页：左侧硬件列表 + 右侧详情（Windows 任务管理器风格） ----
 
-type SideKey = 'system' | 'cpu' | 'mem' | 'swap' | 'disk' | 'net'
+type SideKey = 'system' | 'cpu' | 'mem' | 'swap' | 'disk' | 'gpu' | 'net'
 
 function HardwareView({ hostId, subId }: { hostId: string; subId: string }) {
   const t = useT()
@@ -289,6 +290,9 @@ function HardwareView({ hostId, subId }: { hostId: string; subId: string }) {
     { key: 'mem', icon: '💾', label: t('内存'), pct: `${(last?.mem_pct ?? 0).toFixed(0)}%` },
     { key: 'swap', icon: '🔄', label: 'Swap', pct: `${(last?.swap_pct ?? 0).toFixed(0)}%` },
     { key: 'disk', icon: '💽', label: t('硬盘'), pct: rootDisk ? `${rootDisk.pct.toFixed(0)}%` : '—' },
+    ...(hwInfo?.gpu?.length
+      ? [{ key: 'gpu' as SideKey, icon: '🎮', label: t('显卡'), pct: hwInfo.gpu[0].name || '—' }]
+      : []),
     { key: 'net', icon: '🌐', label: t('网络'), pct: fmtRate(netRx + netTx) },
   ]
 
@@ -501,6 +505,27 @@ function HardwareView({ hostId, subId }: { hostId: string; subId: string }) {
             </div>
           </div>
         )
+      case 'gpu': {
+        const gpus = hwInfo?.gpu || []
+        return (
+          <div>
+            {detailHeader('🎮', t('显卡'), gpus.length ? t('检测到 {0} 张显卡', gpus.length) : '')}
+            {gpus.length === 0 ? (
+              emptyBlock(t('未检测到独立显卡'))
+            ) : (
+              gpus.map((g, i) => (
+                <div key={i} style={{ marginBottom: 14 }}>
+                  {blockTitle(g.name || t('显卡 {0}', i + 1))}
+                  <div className="tm-stats">
+                    {statCard(t('显存'), g.memory || '—', '#34d399')}
+                    {statCard(t('驱动版本'), g.driver || '—', '#34d399')}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )
+      }
       default: {
         // 系统概览：第一行最前面即为发行版名称
         const distro = hwInfo?.distroName || hwInfo?.distro || hwInfo?.os?.split(' ')[0] || t('未知系统')
@@ -515,6 +540,7 @@ function HardwareView({ hostId, subId }: { hostId: string; subId: string }) {
             {kv(t('厂商产品'), [hwInfo?.vendor, hwInfo?.productName].filter(Boolean).join(' ') || '—')}
             {kv(t('CPU型号'), hwInfo?.cpuModel || '—')}
             {kv(t('逻辑核心'), hwInfo ? t('{0} 核', hwInfo.cpuCores) : '—')}
+            {kv(t('显卡'), (hwInfo?.gpu || []).map((g) => g.name).join('、') || '—')}
             {kv(t('内存'), last ? `${fmtBytes(last.mem_used)} / ${fmtBytes(last.mem_total)}` : '—')}
             {kv(t('硬盘根分区'), rootDisk ? `${fmtBytes(rootDisk.used)} / ${fmtBytes(rootDisk.total)}` : '—')}
           </div>

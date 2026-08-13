@@ -18,8 +18,16 @@ type HardwareInfo struct {
 	CPUCores    int    `json:"cpuCores"`    // 逻辑核心数（/proc/cpuinfo processor 行数）
 	VM          bool   `json:"vm"`          // 是否虚拟机
 	Hypervisor  string `json:"hypervisor"`  // 虚拟化平台名（vmware/virtualbox/qemu/kvm/xen/hyperv…），物理机为空
-	ProductName string `json:"productName"` // DMI 产品名，如 "VMware Virtual Platform"；容器内可能为空
-	Vendor      string `json:"vendor"`      // DMI 厂商，如 "VMware, Inc."
+	ProductName string    `json:"productName"` // DMI 产品名，如 "VMware Virtual Platform"；容器内可能为空
+	Vendor      string    `json:"vendor"`      // DMI 厂商，如 "VMware, Inc."
+	GPU         []GPUInfo `json:"gpu"`         // 显卡列表（未检测到则为空数组）
+}
+
+// GPUInfo 单张显卡信息。
+type GPUInfo struct {
+	Name   string `json:"name"`             // 显卡名称，如 "NVIDIA GeForce RTX 3080"
+	Memory string `json:"memory,omitempty"` // 显存（如 "12288 MiB"）
+	Driver string `json:"driver,omitempty"` // 驱动版本（如 "535.104.05"）
 }
 
 // hwCmd 一次性采集硬件/系统静态信息。
@@ -28,7 +36,7 @@ type HardwareInfo struct {
 // 给出厂商与产品名用于判断虚拟化平台。
 // 注意：新采集项一律追加在命令尾部（新增 === 分隔 section），
 // 避免打乱既有解析顺序与测试夹具。
-const hwCmd = `uname -srm; echo ===; cat /proc/cpuinfo; echo ===; cat /sys/class/dmi/id/product_name 2>/dev/null; echo ===; cat /sys/class/dmi/id/sys_vendor 2>/dev/null; echo ===; cat /etc/os-release 2>/dev/null; echo ===; hostname; echo ===; cat /proc/uptime`
+const hwCmd = `uname -srm; echo ===; cat /proc/cpuinfo; echo ===; cat /sys/class/dmi/id/product_name 2>/dev/null; echo ===; cat /sys/class/dmi/id/sys_vendor 2>/dev/null; echo ===; cat /etc/os-release 2>/dev/null; echo ===; hostname; echo ===; cat /proc/uptime; echo ===; if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null; elif command -v lspci >/dev/null 2>&1; then lspci 2>/dev/null | grep -Ei 'vga compatible|3d controller|display controller'; fi`
 
 // HardwareInfo 采集目标机硬件/系统静态信息。
 func (m *Monitor) HardwareInfo(hostID string) (HardwareInfo, error) {
@@ -63,7 +71,7 @@ func (m *Monitor) hardwareInfoLinux(hostID string) (HardwareInfo, error) {
 }
 
 // parseHardwareInfo 解析 hwCmd 的输出（section 分隔）。
-// section 0=uname 1=cpuinfo 2=product_name 3=sys_vendor 4=os-release 5=hostname 6=uptime
+// section 0=uname 1=cpuinfo 2=product_name 3=sys_vendor 4=os-release 5=hostname 6=uptime 7=gpu
 func parseHardwareInfo(out string) HardwareInfo {
 	hi := HardwareInfo{}
 	flagVM := false
@@ -121,6 +129,11 @@ func parseHardwareInfo(out string) HardwareInfo {
 					hi.Uptime = int64(sec)
 				}
 			}
+		case 7:
+			// 显卡：nvidia-smi CSV 行或 lspci 行（每行一张卡）
+			if g := parseGPUInfoLine(line); g != nil {
+				hi.GPU = append(hi.GPU, *g)
+			}
 		}
 	}
 	hi.VM = flagVM
@@ -134,6 +147,42 @@ func parseHardwareInfo(out string) HardwareInfo {
 	return hi
 }
 
+// parseGPUInfoLine 解析单行显卡信息：
+//   - nvidia-smi CSV 行："NVIDIA GeForce RTX 3080, 12288 MiB, 535.104.05"（2~3 段）
+//   - lspci 行："01:00.0 VGA compatible controller: NVIDIA Corporation GA102 [GeForce RTX 3080] (rev a1)"
+//     取 "controller: " 之后、" (" 之前的设备名。
+func parseGPUInfoLine(line string) *GPUInfo {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	// lspci 行：以总线地址 "xx:xx.x " 开头
+	if len(line) >= 8 && line[2] == ':' && line[5] == '.' {
+		rest := line
+		if i := strings.Index(rest, ": "); i >= 0 {
+			rest = rest[i+2:]
+		}
+		if i := strings.Index(rest, " ("); i >= 0 {
+			rest = rest[:i]
+		}
+		rest = strings.TrimSpace(rest)
+		if rest == "" {
+			return nil
+		}
+		return &GPUInfo{Name: rest}
+	}
+	// nvidia-smi CSV：Name, Memory, Driver（可能 2~3 段）
+	if parts := strings.Split(line, ","); len(parts) >= 2 {
+		g := &GPUInfo{Name: strings.TrimSpace(parts[0])}
+		g.Memory = strings.TrimSpace(parts[1])
+		if len(parts) >= 3 {
+			g.Driver = strings.TrimSpace(parts[2])
+		}
+		return g
+	}
+	return &GPUInfo{Name: line}
+}
+
 // unquoteShell 去掉 shell 变量赋值中可能存在的成对引号。
 func unquoteShell(s string) string {
 	if len(s) >= 2 && (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
@@ -144,12 +193,13 @@ func unquoteShell(s string) string {
 
 // ---- Windows 硬件信息 ----
 
-// winHwScript 采集 Windows 静态信息，=== 分隔 5 段：
+// winHwScript 采集 Windows 静态信息，=== 分隔 6 段：
 // 0=CS（Manufacturer\tModel\tHypervisorPresent，后者为 CPUID 虚拟化探测位）
 // 1=CPU（Name\tNumberOfLogicalProcessors）
 // 2=OS（Caption\tVersion）
 // 3=主机名
-// 4=UPTIME（已运行秒数，由远端 PowerShell 直接换算，避免 CIM/区域化时间格式解析歧义）。
+// 4=UPTIME（已运行秒数，由远端 PowerShell 直接换算，避免 CIM/区域化时间格式解析歧义）
+// 5=GPU（Win32_VideoController：Name\tDriverVersion，每卡一行）
 const winHwScript = "$cs = Get-CimInstance Win32_ComputerSystem; Write-Output (\"CS`t\" + $cs.Manufacturer + \"`t\" + $cs.Model + \"`t\" + $cs.HypervisorPresent)\n" +
 	"Write-Output '==='\n" +
 	"$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1; Write-Output (\"CPU`t\" + $cpu.Name + \"`t\" + $cpu.NumberOfLogicalProcessors)\n" +
@@ -158,7 +208,9 @@ const winHwScript = "$cs = Get-CimInstance Win32_ComputerSystem; Write-Output (\
 	"Write-Output '==='\n" +
 	"Write-Output $env:COMPUTERNAME\n" +
 	"Write-Output '==='\n" +
-	"$boot = (Get-Date) - $os.LastBootUpTime; Write-Output (\"UPTIME`t\" + $boot.TotalSeconds)"
+	"$boot = (Get-Date) - $os.LastBootUpTime; Write-Output (\"UPTIME`t\" + $boot.TotalSeconds)\n" +
+	"Write-Output '==='\n" +
+	"$gpus = Get-CimInstance Win32_VideoController; foreach ($g in $gpus) { Write-Output (\"GPU`t\" + $g.Name + \"`t\" + $g.DriverVersion) }"
 
 func (m *Monitor) hardwareInfoWindows(hostID string) (HardwareInfo, error) {
 	client, err := m.hub.GetClient(hostID)
@@ -223,6 +275,15 @@ func parseWindowsHardwareInfo(out string) HardwareInfo {
 				if sec, err := strconv.ParseFloat(f[1], 64); err == nil {
 					hi.Uptime = int64(sec)
 				}
+			}
+		case 5:
+			// 显卡：GPU\tName\tDriverVersion（每卡一行）
+			if len(f) >= 2 && f[0] == "GPU" {
+				g := GPUInfo{Name: f[1]}
+				if len(f) >= 3 {
+					g.Driver = f[2]
+				}
+				hi.GPU = append(hi.GPU, g)
 			}
 		}
 	}

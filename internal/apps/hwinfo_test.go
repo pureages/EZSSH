@@ -164,3 +164,88 @@ alpine-vm
 		t.Errorf("Uptime: got %d, want 9999", hi.Uptime)
 	}
 }
+
+// TestParseHardwareInfo_GPUNvidia 解析 nvidia-smi CSV 显卡行。
+func TestParseHardwareInfo_GPUNvidia(t *testing.T) {
+	content := `Linux 6.1.0-18-amd64 x86_64
+===
+processor	: 0
+model name	: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz
+flags		: fpu
+===
+===
+===
+ID=ubuntu
+===
+my-gpu-host
+===
+123.00 456.00
+===
+NVIDIA GeForce RTX 3080, 12288 MiB, 535.104.05
+`
+	hi := parseHardwareInfo(content)
+	if len(hi.GPU) != 1 {
+		t.Fatalf("GPU: got %d, want 1", len(hi.GPU))
+	}
+	g := hi.GPU[0]
+	if g.Name != "NVIDIA GeForce RTX 3080" || g.Memory != "12288 MiB" || g.Driver != "535.104.05" {
+		t.Errorf("GPU: got %+v", g)
+	}
+}
+
+// TestParseHardwareInfo_GPULspci 解析 lspci 显卡行（多卡）。
+func TestParseHardwareInfo_GPULspci(t *testing.T) {
+	content := `Linux 6.1.0-18-amd64 x86_64
+===
+processor	: 0
+model name	: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz
+flags		: fpu
+===
+===
+===
+===
+gpu-host
+===
+10.00 20.00
+===
+01:00.0 VGA compatible controller: NVIDIA Corporation GA102 [GeForce RTX 3080] (rev a1)
+02:00.0 3D controller: NVIDIA Corporation GA102 [GeForce RTX 3080 Lite Hash Rate] (rev a1)
+`
+	hi := parseHardwareInfo(content)
+	if len(hi.GPU) != 2 {
+		t.Fatalf("GPU: got %d, want 2", len(hi.GPU))
+	}
+	if hi.GPU[0].Name != "NVIDIA Corporation GA102 [GeForce RTX 3080]" {
+		t.Errorf("GPU0: got %q", hi.GPU[0].Name)
+	}
+	if hi.GPU[1].Name != "NVIDIA Corporation GA102 [GeForce RTX 3080 Lite Hash Rate]" {
+		t.Errorf("GPU1: got %q", hi.GPU[1].Name)
+	}
+}
+
+// TestParseWindowsHardwareInfo_GPU 解析 Windows 显卡行。
+func TestParseWindowsHardwareInfo_GPU(t *testing.T) {
+	content := `CS	VMware, Inc.	VMware Virtual Platform	True
+===
+CPU	Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz	16
+===
+OS	Microsoft Windows 11 Pro	10.0.22631
+===
+WIN-PC
+===
+UPTIME	3600.5
+===
+GPU	Microsoft Basic Display Adapter	10.0.22621.4
+GPU	NVIDIA GeForce RTX 3060	31.0.15.3742
+`
+	hi := parseWindowsHardwareInfo(content)
+	if len(hi.GPU) != 2 {
+		t.Fatalf("GPU: got %d, want 2", len(hi.GPU))
+	}
+	if hi.GPU[0].Name != "Microsoft Basic Display Adapter" {
+		t.Errorf("GPU0: got %q", hi.GPU[0].Name)
+	}
+	if hi.GPU[1].Name != "NVIDIA GeForce RTX 3060" || hi.GPU[1].Driver != "31.0.15.3742" {
+		t.Errorf("GPU1: got %+v", hi.GPU[1])
+	}
+}
