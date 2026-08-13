@@ -203,6 +203,9 @@ export const api = {
 
   listHosts: () => request<Host[]>('/api/hosts'),
 
+  /** 生成/获取 pi-SSH-Agent 的 agent token（pissh 调 agent API 用） */
+  agentToken: () => request<{ token: string }>('/api/agent/token', { method: 'POST' }),
+
   createHost: (input: HostInput) =>
     request<Host>('/api/hosts', { method: 'POST', body: JSON.stringify(input) }),
 

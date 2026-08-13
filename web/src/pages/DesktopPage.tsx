@@ -79,7 +79,7 @@ function snapToGrid(v: number, origin: number, gap: number): number {
 }
 
 /** 应用中心卡片默认顺序 */
-const DEFAULT_APP_ORDER = ['servermap', 'addhost', 'settings', 'download', 'oneclick', 'website']
+const DEFAULT_APP_ORDER = ['servermap', 'addhost', 'settings', 'download', 'oneclick', 'website', 'pisshagent']
 
 /** 从 localStorage 读取应用中心排序（非法/缺失时返回空数组） */
 function loadAppOrder(): string[] {
@@ -266,6 +266,7 @@ export function DesktopPage() {
     download: { icon: '⬇️', label: t('直链下载'), run: () => openApp('download', null) },
     oneclick: { icon: '⚡', label: t('一键命令'), run: () => openApp('oneclick', null) },
     website: { icon: '🌐', label: t('网站管理'), run: () => openApp('website', null) },
+    pisshagent: { icon: '🤖', label: t('pi-SSH-Agent'), run: () => openApp('pisshagent', null) },
   }
 
   /** 打开编辑服务器表单 */
