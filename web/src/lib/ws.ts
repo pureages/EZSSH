@@ -17,6 +17,8 @@ class WSClient {
   private channelHandlers = new Map<string, Set<Handler>>()
   private connecting: Promise<void> | null = null
   private closed = false
+  /** 连接（重连）成功回调：断线自动重连后通知订阅者重建会话 */
+  private reconnectHandlers = new Set<() => void>()
 
   async connect(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return
@@ -31,6 +33,8 @@ class WSClient {
       ws.onopen = () => {
         this.connecting = null
         resolve()
+        // 首次连接与断线重连都会触发；订阅方用"已挂载"标志去重，避免首连重复建会话
+        this.reconnectHandlers.forEach((h) => h())
       }
       ws.onerror = () => {
         this.connecting = null
@@ -98,6 +102,14 @@ class WSClient {
     }
     set.add(handler)
     return () => set!.delete(handler)
+  }
+
+  /** 订阅连接（含自动重连）成功事件，返回取消函数。 */
+  onReconnect(handler: () => void): () => void {
+    this.reconnectHandlers.add(handler)
+    return () => {
+      this.reconnectHandlers.delete(handler)
+    }
   }
 }
 

@@ -164,6 +164,8 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const [imgScale, setImgScale] = useState(1)
   const [imgRotate, setImgRotate] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /** 右键上传的目标目录（文件夹右键上传到该文件夹；null = 当前目录） */
+  const uploadDirRef = useRef<string | null>(null)
   const [hi, setHi] = useState(0)
   // 历史栈的 ref（源）+ 指针 state：导航失败需在异步回调里同步修正历史（保持 hi === history.length-1）
   const historyRef = useRef<string[]>([ROOT])
@@ -889,11 +891,16 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     if (!files || !hostId) return
     const file = files[0]
     if (!file) return
+    // 右键文件夹"上传"时目标为该文件夹；否则上传到当前目录
+    const targetDir = uploadDirRef.current || cwd
+    uploadDirRef.current = null
+    const targetPath =
+      targetDir === ROOT ? `/${file.name}` : `${targetDir.replace(/\/+$/, '')}/${file.name}`
     setUploading(file.name)
     setUploadPct(0)
     setUploadBytes(`0 / ${fmtSize(file.size)}`)
     api
-      .sftpUpload(hostId, join(file.name), file, (pct, loaded, total) => {
+      .sftpUpload(hostId, targetPath, file, (pct, loaded, total) => {
         setUploadPct(pct)
         if (loaded !== undefined) setUploadBytes(`${fmtSize(loaded)} / ${fmtSize(total || file.size)}`)
       })
@@ -1809,6 +1816,9 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         >
           {!ctx.entry && (
             <>
+              <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
+                {t('🔄 刷新')}
+              </div>
               <div className="ctx-menu-item" onClick={() => { mkdir(); setCtx(null) }}>
                 {t('📁 新建目录')}
               </div>
@@ -1850,13 +1860,27 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
               <div className="ctx-menu-item" onClick={() => { void openTerminalHere(); setCtx(null) }}>
                 {t('🖥️ 打开终端')}
               </div>
-              <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
-                {t('🔄 刷新')}
-              </div>
             </>
           )}
           {ctx.entry && (
             <>
+              {ctx.entry.is_dir && (
+                <>
+                  <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
+                    {t('🔄 刷新')}
+                  </div>
+                  <div
+                    className="ctx-menu-item"
+                    onClick={() => {
+                      uploadDirRef.current = join(ctx.entry!.name)
+                      fileInputRef.current?.click()
+                      setCtx(null)
+                    }}
+                  >
+                    {t('⬆️ 上传')}
+                  </div>
+                </>
+              )}
               {!ctx.entry.is_dir && (
                 <div
                   className="ctx-menu-item"

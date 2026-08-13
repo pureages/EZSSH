@@ -43,8 +43,9 @@ function copyFallback(text: string) {
 /**
  * 粘贴降级：非安全上下文（http 访问）下无 Clipboard API，
  * 聚焦隐藏 textarea 后尝试 execCommand('paste')，通过 capture 阶段
- * 的 paste 事件读取剪贴板文本。execCommand('paste') 被浏览器禁用时
- * 会返回 false，此时回调空串，由调用方提示用户手动 Ctrl+V。
+ * 的 paste 事件读取剪贴板文本；execCommand('paste') 被浏览器禁用时
+ * 再尝试 navigator.clipboard.readText()（HTTPS 场景），最后回调空串
+ * 由调用方引导用户按 Ctrl+V。
  */
 function pasteFallback(onText: (text: string) => void) {
   const ta = document.createElement('textarea')
@@ -54,17 +55,30 @@ function pasteFallback(onText: (text: string) => void) {
   ta.style.opacity = '0'
   document.body.appendChild(ta)
   let settled = false
-  const settle = (ok: boolean) => {
+  const settle = (ok: boolean, text = '') => {
     if (settled) return
     settled = true
     window.removeEventListener('paste', onPaste, true)
     ta.remove()
-    if (!ok) onText('')
+    if (ok) onText(text)
+    else tryReadClipboard()
   }
   const onPaste = (e: ClipboardEvent) => {
     const text = e.clipboardData?.getData('text/plain') ?? ''
-    settle(true)
-    onText(text)
+    settle(true, text)
+  }
+  const tryReadClipboard = () => {
+    if (navigator.clipboard?.readText) {
+      navigator.clipboard
+        .readText()
+        .then((txt) => {
+          if (txt) onText(txt)
+          else onText('')
+        })
+        .catch(() => onText(''))
+    } else {
+      onText('')
+    }
   }
   window.addEventListener('paste', onPaste, true)
   ta.focus()
@@ -77,6 +91,9 @@ function pasteFallback(onText: (text: string) => void) {
 
 /**
  * 终端 App：xterm.js + WebSocket 与后端 SSH shell 双向打通。
+ * - 右键复制：仅复制到剪贴板，保留选区与画面（不弹提示、不黑屏）
+ * - 右键粘贴：优先 Clipboard API，失败走降级
+ * - 断线自动重连：WS 断开重连后自动重建终端会话（应对浏览器节能冻结/空闲断连）
  */
 export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps) {
   const t = useT()
@@ -85,7 +102,7 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
   const fitRef = useRef<FitAddon | null>(null)
   const channelIdRef = useRef(channelId || newChannelId())
   const hostIdRef = useRef(hostId)
-  // 顶部居中的临时提示（复制/粘贴结果反馈）
+  // 顶部居中的临时提示（粘贴结果反馈等）
   const [toastMsg, setToastMsg] = useState('')
   const toastTimerRef = useRef<number | null>(null)
   const toast = (msg: string) => {
@@ -94,44 +111,39 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
     toastTimerRef.current = window.setTimeout(() => setToastMsg(''), 1800)
   }
 
-  /** 终端右键（Linux 习惯）：有选区 → 复制选中文本并清空选区；无选区 → 粘贴剪贴板内容 */
+  /** 终端右键（Linux 习惯）：有选区 → 复制（保留选区，不提示）；无选区 → 粘贴 */
   const handleTermContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     const term = termRef.current
     if (!term) return
     if (term.hasSelection()) {
+      // 只复制到剪贴板：保留选区与画面内容，避免清除选区导致"内容消失/黑屏"
       const text = term.getSelection()
-      const done = () => toast(t('已复制'))
       if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).then(done).catch(() => {
-          copyFallback(text)
-          done()
-        })
+        navigator.clipboard.writeText(text).catch(() => copyFallback(text))
       } else {
         copyFallback(text)
-        done()
       }
-      term.clearSelection()
-    } else {
-      const target = (text: string) => {
-        const tm = termRef.current
-        if (!tm) return
-        if (text) {
-          tm.paste(text)
-          tm.focus()
-          toast(t('已粘贴'))
-        } else {
-          toast(t('无法读取剪贴板，请按 Ctrl+V 粘贴'))
-        }
-      }
-      if (navigator.clipboard?.readText) {
-        navigator.clipboard
-          .readText()
-          .then(target)
-          .catch(() => toast(t('无法读取剪贴板，请按 Ctrl+V 粘贴')))
+      return
+    }
+    const target = (text: string) => {
+      const tm = termRef.current
+      if (!tm) return
+      if (text) {
+        tm.paste(text)
+        tm.focus()
+        toast(t('已粘贴'))
       } else {
-        pasteFallback(target)
+        toast(t('浏览器禁止自动读取剪贴板，请按 Ctrl+V 粘贴'))
       }
+    }
+    if (navigator.clipboard?.readText) {
+      navigator.clipboard
+        .readText()
+        .then(target)
+        .catch(() => pasteFallback(target))
+    } else {
+      pasteFallback(target)
     }
   }
 
@@ -156,15 +168,21 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
 
     const cid = channelIdRef.current
     let disposed = false
+    let cleanup: (() => void) | null = null
+    let mounted = false
 
-    const open = async () => {
-      try {
-        await ws.connect()
-      } catch {
-        term.write(`\r\n\x1b[31m${t('[EZSSH] WebSocket 连接失败，请刷新重试')}\x1b[0m\r\n`)
-        return
-      }
+    /** 挂载/重建终端会话：订阅、open、输入、心跳。断线重连后再次调用。 */
+    const mount = () => {
       if (disposed) return
+      if (cleanup) {
+        try {
+          cleanup()
+        } catch {
+          /* ignore */
+        }
+        cleanup = null
+      }
+      mounted = true
 
       // 消费启动上下文（文件管理器打开终端 cd / 一键命令注入）
       const init = consumePendingTerminalCwd(hostIdRef.current ?? '')
@@ -272,8 +290,7 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
         if (!disposed) ws.send('ping', cid, undefined)
       }, 30000)
 
-      // 清理函数
-      const cleanup = () => {
+      cleanup = () => {
         if (injectTimer) window.clearTimeout(injectTimer)
         clearInterval(ping)
         dataDisposable.dispose()
@@ -282,21 +299,42 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
         unsubErr()
         ws.send('terminal.close', cid, undefined)
       }
-      ;(term as unknown as { _ezsshCleanup?: () => void })._ezsshCleanup = cleanup
     }
+
+    // WebSocket 断线自动重连后重建终端会话（首次连接用已挂载标志去重）
+    const unsubReconn = ws.onReconnect(() => {
+      if (mounted) {
+        term.write(`\r\n\x1b[2m--- ${t('[连接已恢复]')} ---\x1b[0m\r\n`)
+        mount()
+      }
+    })
 
     const el = containerRef.current
     if (el) {
       term.open(el)
     }
 
-    void open()
+    void (async () => {
+      try {
+        await ws.connect()
+      } catch {
+        term.write(`\r\n\x1b[31m${t('[EZSSH] WebSocket 连接失败，请刷新重试')}\x1b[0m\r\n`)
+        return
+      }
+      if (disposed) return
+      mount()
+    })()
 
     return () => {
       disposed = true
-      const cleanup = (term as unknown as { _ezsshCleanup?: () => void })
-        ._ezsshCleanup
-      cleanup?.()
+      if (cleanup) {
+        try {
+          cleanup()
+        } catch {
+          /* ignore */
+        }
+      }
+      unsubReconn()
       term.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -331,6 +369,10 @@ export function TerminalApp({ windowId, hostId, channelId, platform }: AppProps)
       className="terminal-container"
       style={{ position: 'relative' }}
       onContextMenu={handleTermContextMenu}
+      onMouseDownCapture={(e) => {
+        // 阻止右键 mousedown 进入 xterm：避免其清除选区（选中复制后内容不应消失）
+        if (e.button === 2) e.stopPropagation()
+      }}
     >
       {toastMsg && (
         <div
