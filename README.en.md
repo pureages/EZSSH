@@ -4,7 +4,7 @@
 
 Version: v0.0.6-1
 
-**A lightweight, clean, visualized, native SSH / SFTP-driven, self-hosted centralized web gateway for servers / VPS, powered by Go** — no Agent required on servers, safe and controllable.
+**A lightweight, clean, visualized, native SSH / SFTP-driven, self-hosted centralized web gateway for servers / VPS, powered by Go** — no Agent required on the managed servers, safe and controllable.
 
 For more details, see the [User Guide](doc/user-guide.en.md)
 
@@ -25,6 +25,7 @@ For more details, see the [User Guide](doc/user-guide.en.md)
 3. **Docker management**: manage Docker visually and centrally.
 4. **Server monitoring**: monitor server status in real time, with a built-in task manager.
 5. **One-click commands**: run frequently used commands with one click, and manage sites centrally.
+6. **Pi-Agent management**: an AI agent based on [pi](https://github.com/earendil-works/pi) that lets AI manage your servers.
 
 ## Quick Start
 
