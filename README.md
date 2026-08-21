@@ -8,6 +8,8 @@
 
 如果你想要更详细的内容请查看[用户手册](doc/user-guide.md)
 
+安卓APK已推出，可访问：https://github.com/pureages/EZSSH-app
+
 ## 预览
 
 <p align="center">

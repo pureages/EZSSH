@@ -8,6 +8,8 @@ Version: v0.0.6-2
 
 For more details, see the [User Guide](doc/user-guide.en.md)
 
+The Android APK is available at: https://github.com/pureages/EZSSH-app
+
 ## Preview
 
 <p align="center">
