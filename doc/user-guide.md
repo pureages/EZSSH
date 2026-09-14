@@ -46,7 +46,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/
 ### 2.2 Docker 部署
 
 ```bash
-docker run -d --name ezssh -p 49466:49466 \
+docker run -d --name ezssh \
+  --network host \
   -v ezssh-data:/app/data \
   pureages/ezssh:latest
 ```
