@@ -22,8 +22,8 @@ type Client struct {
 func NewClient(c *Config) *Client {
 	jar, _ := cookiejar.New(nil)
 	return &Client{
-		base: c.BaseURL(),
-		http: &http.Client{Timeout: 15 * time.Second, Jar: jar},
+		base:   c.BaseURL(),
+		http:   &http.Client{Timeout: 15 * time.Second, Jar: jar},
 		config: c,
 	}
 }
@@ -86,23 +86,23 @@ func translateServer(s string) string {
 
 // serverErrs 常见服务端错误（中文原文 → English）。
 var serverErrs = map[string]string{
-	"账号或口令错误":                             "Invalid account or password",
-	"验证码错误或已过期":                          "Invalid captcha or expired",
-	"新口令至少 8 位":                           "New password must be at least 8 characters",
-	"旧口令不正确":                              "Old password is incorrect",
-	"新口令不能与旧口令相同":                       "New password cannot be the same as the old one",
-	"保险库未解锁，无法修改口令":                    "Vault is locked; cannot change password",
-	"账号不存在":                                "Account not found",
-	"读取账号失败":                              "Failed to read account",
-	"更新口令失败":                              "Failed to update password",
-	"login_route 必须以 / 开头，且不含空格/#/?": "login_route must start with / and contain no spaces, # or ?",
-	"login_route 过长":                        "login_route is too long",
-	"lang 仅支持 zh/en":                       "lang only supports zh/en",
-	"already initialized":                    "already initialized",
-	"unauthorized":                           "unauthorized",
-	"invalid request body":                   "invalid request body",
-	"username must be 1-64 chars":            "username must be 1-64 chars",
-	"password must be at least 8 chars":      "password must be at least 8 chars",
+	"账号或口令错误":                                 "Invalid account or password",
+	"验证码错误或已过期":                               "Invalid captcha or expired",
+	"新口令至少 8 位":                               "New password must be at least 8 characters",
+	"旧口令不正确":                                  "Old password is incorrect",
+	"新口令不能与旧口令相同":                             "New password cannot be the same as the old one",
+	"保险库未解锁，无法修改口令":                           "Vault is locked; cannot change password",
+	"账号不存在":                                   "Account not found",
+	"读取账号失败":                                  "Failed to read account",
+	"更新口令失败":                                  "Failed to update password",
+	"login_route 必须以 / 开头，且不含空格/#/?":          "login_route must start with / and contain no spaces, # or ?",
+	"login_route 过长":                          "login_route is too long",
+	"lang 仅支持 zh/en":                          "lang only supports zh/en",
+	"already initialized":                     "already initialized",
+	"unauthorized":                            "unauthorized",
+	"invalid request body":                    "invalid request body",
+	"username must be 1-64 chars":             "username must be 1-64 chars",
+	"password must be at least 8 chars":       "password must be at least 8 chars",
 	"too many attempts, locked for 5 minutes": "too many attempts, locked for 5 minutes",
 }
 
@@ -132,6 +132,15 @@ func (c *Client) login(user, pwd string) error {
 // Login 使用配置中的账号密码登录。
 func (c *Client) Login() error {
 	return c.login(c.config.Username, c.config.Password)
+}
+
+// GetSettings 读取服务端配置（需登录）：login_route / lang 等。
+// 注意：安全路由不再由公开的 /api/init-status 下发，需认证后读取。
+func (c *Client) GetSettings() (map[string]any, error) {
+	if err := c.Login(); err != nil {
+		return nil, err
+	}
+	return c.do(http.MethodGet, "/api/settings", nil)
 }
 
 // SetLoginRoute 设置登录路由（需登录；API 路径固定，不受路由影响）。

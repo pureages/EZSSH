@@ -52,11 +52,12 @@ export interface HostInput {
 export interface InitStatus {
   initialized: boolean
   unlocked: boolean
-  login_route: string
   /** 界面语言偏好（后端 settings 持久化）：zh | en */
   lang: string
   /** 网关版本号（来自后端，支持 ldflags 覆盖） */
   version: string
+  // 注意：不包含登录路由（安全路由）——该值仅通过需认证的 /api/settings 返回，
+  // 登录入口是否放行统一由 POST /api/route-check 判定。
 }
 
 export interface UpdateCheckResult {
@@ -239,7 +240,10 @@ export interface Certificate {
   id: string
   hostId: string
   hostName: string
+  /** 逗号分隔的域名串（第 1 个为主域名，兼容旧数据） */
   domain: string
+  /** 解析后的域名列表（多域名 SAN / 通配符 *.example.com） */
+  domains?: string[]
   method: 'http' | 'dns'
   dns_account_id: string
   email: string

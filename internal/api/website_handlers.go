@@ -25,15 +25,39 @@ func newRandomID(prefix string) (string, error) {
 
 var domainRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$`)
 
+// validSiteDomain 站点域名校验：普通域名，或最左标签为通配符的 *.example.com
+// （nginx server_name 与 Let's Encrypt 泛域名证书均支持该形式，且通配符至少要覆盖二级域）。
+func validSiteDomain(d string) bool {
+	if strings.HasPrefix(d, "*.") {
+		rest := d[2:]
+		return strings.Contains(rest, ".") && domainRe.MatchString(rest)
+	}
+	return domainRe.MatchString(d)
+}
+
 // validateDomains 校验逗号分隔的域名列表；返回首个非法域名。
 func validateDomains(domains string) (string, bool) {
 	for _, d := range strings.Split(domains, ",") {
 		d = strings.TrimSpace(d)
-		if d == "" || !domainRe.MatchString(d) {
+		if d == "" || !validSiteDomain(d) {
 			return d, false
 		}
 	}
 	return "", true
+}
+
+// containsDomain 判断域名列表是否包含指定域名（大小写不敏感，忽略空白）。
+func containsDomain(domains []string, domain string) bool {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" {
+		return false
+	}
+	for _, d := range domains {
+		if strings.ToLower(strings.TrimSpace(d)) == domain {
+			return true
+		}
+	}
+	return false
 }
 
 // ndjson 构造 NDJSON 流式响应 writer；客户端断开后 send 自动忽略，不会 panic。
@@ -277,11 +301,12 @@ func (s *Server) removeRemoteCert(hostID, domain string, warnings *[]string) err
 	certs, err := s.st.ListCertificates(hostID)
 	if err == nil {
 		for _, c := range certs {
-			if c.Domain != domain {
+			// 证书可能覆盖多个域名（含通配符）：只要列表包含该站点的域名即视为同一张证书
+			if !containsDomain(c.Domains(), domain) {
 				continue
 			}
-			if err := s.cert.RemoveCert(hostID, domain, func(string) {}); err != nil {
-				*warnings = append(*warnings, "移除证书 "+domain+" 失败: "+err.Error())
+			if err := s.cert.RemoveCert(hostID, c.Domain, func(string) {}); err != nil {
+				*warnings = append(*warnings, "移除证书 "+c.Domain+" 失败: "+err.Error())
 			}
 			_ = s.st.DeleteCertificate(c.ID)
 		}

@@ -6,15 +6,27 @@ import (
 	"time"
 
 	"ezssh/internal/sshhub"
+	"ezssh/internal/store"
 )
 
 // CertManager 通过远程服务器上的 acme.sh 签发/续签 Let's Encrypt 证书。
-// 支持 HTTP-01（--webroot）与 DNS-01（--dns dns_cf，Cloudflare API Token）。
-// 证书经 --install-cert 安装到稳定的 /etc/nginx/ssl/<domain>/ 路径供 nginx 引用，
+// 支持 HTTP-01（--webroot）与 DNS-01（--dns dns_cf，Cloudflare API Token）：
+//   - 多域名（SAN）：一条命令可携带多个 -d，第 1 个域名为主域名；
+//   - 通配符域名（*.example.com）：只能走 DNS-01（HTTP-01 无法签发泛域名）。
+//
+// 证书经 --install-cert 安装到稳定的 /etc/nginx/ssl/<主域名>/ 路径供 nginx 引用，
 // 并写入 reloadcmd（续签时自动 reload nginx）；acme.sh 自带 cron 兜底自动续签。
 type CertManager struct {
 	hub  *sshhub.Hub
 	sftp *SFTPManager
+}
+
+// certPrimaryDomain 取域名串（逗号/空白分隔）中的主域名——acme.sh 以首个 -d 命名证书目录。
+func certPrimaryDomain(domains string) string {
+	if ds := store.SplitDomainList(domains); len(ds) > 0 {
+		return ds[0]
+	}
+	return ""
 }
 
 func NewCertManager(hub *sshhub.Hub, sftp *SFTPManager) *CertManager {
@@ -71,13 +83,46 @@ func (m *CertManager) hasAcmeCert(hostID, domain string) bool {
 	return err == nil && strings.Contains(out, "YES")
 }
 
-// Issue 签发证书。method=dns 时需传 Cloudflare API Token（cfToken）；method=http 时用 webroot。
-// 签发成功自动安装到 /etc/nginx/ssl/<domain>/ 并写入 reloadcmd。
-// 若 acme.sh 已存在该域名证书（如面板记录被删后再次签发），自动追加 --force 强制重新签发。
-func (m *CertManager) Issue(hostID, domain, method, cfToken, webroot string, onLine func(string)) error {
+// buildIssueArgs 构建 acme.sh --issue 的验证参数（纯函数，便于测试）。
+// 每个域名生成一个 -d（多域名写入同一张证书的 SAN 列表）；域名一律单引号包裹，
+// 避免 shell 把通配符 *.example.com 当作文件名展开。
+// 返回 issueArgs（含 --issue）、pre（前置脚本，httpwebroot 需要预建目录）与主域名（首个域名）。
+func buildIssueArgs(domains []string, method, webroot string) (issueArgs, pre, primary string, err error) {
+	if len(domains) == 0 {
+		return "", "", "", fmt.Errorf("域名不能为空")
+	}
+	primary = domains[0]
+	dArgs := ""
+	for _, d := range domains {
+		if d = strings.TrimSpace(d); d != "" {
+			dArgs += " -d " + sshQuote(d)
+		}
+	}
+	switch method {
+	case "dns":
+		// DNS-01：通配符域名只能走此方式
+		return "--issue --dns dns_cf" + dArgs + " --keylength ec-256", "", primary, nil
+	default:
+		webroot = strings.TrimSpace(webroot)
+		if webroot == "" {
+			return "", "", "", fmt.Errorf("HTTP 验证需要提供网站根目录（webroot）")
+		}
+		// 确保 webroot 目录存在（acme.sh 会在其下创建 .well-known/acme-challenge）
+		return "--issue --webroot " + sshQuote(webroot) + dArgs + " --keylength ec-256",
+			"mkdir -p " + sshQuote(webroot) + "\n", primary, nil
+	}
+}
+
+// Issue 签发证书，支持多域名（SAN）与通配符域名。
+// domains 为域名列表（首项为主域名）；method=dns 时需传 Cloudflare API Token（cfToken），
+// method=http 时用 webroot。签发成功自动安装到 /etc/nginx/ssl/<主域名>/ 并写入 reloadcmd。
+// 若 acme.sh 已存在该主域名证书（如面板记录被删后再次签发），自动追加 --force 强制重新签发。
+func (m *CertManager) Issue(hostID string, domains []string, method, cfToken, webroot string, onLine func(string)) error {
+	issueArgs, pre, primary, err := buildIssueArgs(domains, method, webroot)
+	if err != nil {
+		return err
+	}
 	env := ""
-	issueArgs := "--issue"
-	pre := ""
 	if method == "dns" {
 		cfToken = strings.TrimSpace(cfToken)
 		if cfToken == "" {
@@ -85,17 +130,8 @@ func (m *CertManager) Issue(hostID, domain, method, cfToken, webroot string, onL
 		}
 		// 凭据经环境变量注入（acme.sh dns_cf 读取），避免写盘
 		env = "CF_Token=" + shellQuote(cfToken) + " "
-		issueArgs += " --dns dns_cf -d " + sshQuote(domain) + " --keylength ec-256"
-	} else {
-		webroot = strings.TrimSpace(webroot)
-		if webroot == "" {
-			return fmt.Errorf("HTTP 验证需要提供网站根目录（webroot）")
-		}
-		// 确保 webroot 目录存在（acme.sh 会在其下创建 .well-known/acme-challenge）
-		pre = "mkdir -p " + sshQuote(webroot) + "\n"
-		issueArgs += " --webroot " + sshQuote(webroot) + " -d " + sshQuote(domain) + " --keylength ec-256"
 	}
-	if m.hasAcmeCert(hostID, domain) {
+	if m.hasAcmeCert(hostID, primary) {
 		onLine("==> 检测到 acme.sh 已存在该域名证书，追加 --force 强制重新签发")
 		issueArgs += " --force"
 	}
@@ -110,7 +146,7 @@ func (m *CertManager) Issue(hostID, domain, method, cfToken, webroot string, onL
 		return fmt.Errorf("acme.sh 签发失败: %w", err)
 	}
 
-	if err := m.installCert(hostID, domain, onLine); err != nil {
+	if err := m.installCert(hostID, primary, onLine); err != nil {
 		return err
 	}
 	onLine("==> 证书签发并安装完成")
@@ -135,11 +171,16 @@ func (m *CertManager) installCert(hostID, domain string, onLine func(string)) er
 	return nil
 }
 
-// Renew 续签证书。force=true 无条件续签（手动按钮）；自动续签不加 force，未到期时 acme.sh 自动跳过。
+// Renew 续签证书。domains 可为逗号分隔的域名列表（多域名证书按主域名续签，SAN 会一并续期）。
+// force=true 无条件续签（手动按钮）；自动续签不加 force，未到期时 acme.sh 自动跳过。
 // 续签成功会自动重装证书到稳定路径并 reload nginx。
 // 注意：命令末尾不追加 --log，原因同 Issue（--log 作末参触发 shift 越界 bug）。
 // 续签前先 mkdir -p 证书目录，保证 acme.sh 重放保存的 --install-cert 钩子时目标目录存在。
-func (m *CertManager) Renew(hostID, domain string, force bool, onLine func(string)) error {
+func (m *CertManager) Renew(hostID, domains string, force bool, onLine func(string)) error {
+	domain := certPrimaryDomain(domains)
+	if domain == "" {
+		return fmt.Errorf("域名不能为空")
+	}
 	args := "--renew -d " + sshQuote(domain) + " --ecc --server letsencrypt"
 	if force {
 		args += " --force"
@@ -151,8 +192,12 @@ func (m *CertManager) Renew(hostID, domain string, force bool, onLine func(strin
 }
 
 // CertStatus 读取已安装证书的到期时间，返回 SQLite 可存格式（"2006-01-02 15:04:05"）。
-// 证书未安装时返回空串与错误。
-func (m *CertManager) CertStatus(hostID, domain string) (string, error) {
+// domains 可为逗号分隔的域名列表，取主域名定位安装目录；证书未安装时返回空串与错误。
+func (m *CertManager) CertStatus(hostID, domains string) (string, error) {
+	domain := certPrimaryDomain(domains)
+	if domain == "" {
+		return "", fmt.Errorf("域名不能为空")
+	}
 	pem := "/etc/nginx/ssl/" + domain + "/fullchain.pem"
 	out, err := m.exec(hostID, `openssl x509 -enddate -noout -in `+sshQuote(pem)+` 2>/dev/null`)
 	if err != nil || strings.TrimSpace(out) == "" {
@@ -175,7 +220,12 @@ func (m *CertManager) CertStatus(hostID, domain string) (string, error) {
 }
 
 // RemoveCert 移除 acme.sh 中的证书记录并删除安装目录。
-func (m *CertManager) RemoveCert(hostID, domain string, onLine func(string)) error {
+// domains 可为逗号分隔的域名列表，取主域名为准（多域名证书在 acme.sh 中按主域名索引）。
+func (m *CertManager) RemoveCert(hostID, domains string, onLine func(string)) error {
+	domain := certPrimaryDomain(domains)
+	if domain == "" {
+		return fmt.Errorf("域名不能为空")
+	}
 	if installed, _ := m.CheckAcmeSh(hostID); installed {
 		cmd := `sh "$HOME/.acme.sh/acme.sh" --remove -d ` + sshQuote(domain) + ` --ecc 2>&1`
 		_ = m.runScript(hostID, "set -e\n"+cmd+"\n", onLine)

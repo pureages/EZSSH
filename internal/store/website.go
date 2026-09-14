@@ -33,6 +33,54 @@ func (w *Website) AllDomains() []string {
 	return splitDomains(w.Domains)
 }
 
+// SplitDomainList 拆分「逗号 / 分号 / 空白」分隔的域名串：去空、去重、统一小写并保持顺序。
+// 用于证书的多域名（SAN）与通配符域名；与 splitDomains（仅按逗号、保持原大小写）语义不同。
+func SplitDomainList(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	start := -1
+	flush := func(end int) {
+		if start < 0 {
+			return
+		}
+		d := toLowerASCII(trimSpace(s[start:end]))
+		start = -1
+		if d == "" || seen[d] {
+			return
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || isDomainSep(s[i]) {
+			flush(i)
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	return out
+}
+
+func isDomainSep(c byte) bool {
+	switch c {
+	case ',', ';', ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
+
+func toLowerASCII(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'A' && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
 func splitDomains(s string) []string {
 	var out []string
 	start := 0

@@ -9,7 +9,7 @@ import (
 )
 
 // appVersion 为 ezssh Agent 版本号。
-const appVersion = "0.0.7"
+const appVersion = "0.0.7-2"
 
 // cmdMenu 交互式管理菜单主循环。
 func cmdMenu(cfg *Config) error {
@@ -66,6 +66,17 @@ func printHeader(cfg *Config) {
 	}
 }
 
+// loginRouteOf 读取服务端登录路由：公开的 /api/init-status 已不再下发该值（安全路由不泄露），
+// 改为登录后走需认证的 /api/settings 读取；登录失败时回落到本地配置值。
+func loginRouteOf(cfg *Config) string {
+	if st, err := NewClient(cfg).GetSettings(); err == nil {
+		if v := strVal(st, "login_route"); v != "" {
+			return v
+		}
+	}
+	return cfg.LoginRoute
+}
+
 // cmdStatus 运行状态。
 func cmdStatus(cfg *Config) {
 	pl("")
@@ -89,7 +100,8 @@ func cmdStatus(cfg *Config) {
 	pl("版本: %s", strVal(st, "version"))
 	pl("已初始化: %s", boolText(st, "initialized", T("是"), T("否")))
 	pl("保险库: %s", boolText(st, "unlocked", T("已解锁"), T("未解锁")))
-	pl("登录路由: %s", strVal(st, "login_route"))
+	// 安全路由不再由公开接口下发：这里显示本地配置值（需登录态才能读取服务端实际值）
+	pl("登录路由: %s", cfg.LoginRoute)
 	pl("界面语言: %s", strVal(st, "lang"))
 }
 
@@ -101,10 +113,8 @@ func cmdAccount(cfg *Config) {
 	pl("密码: %s", cfg.Password)
 	pl("登录路由: %s", cfg.LoginRoute)
 	pl("地址: %s", cfg.BaseURL())
-	if st, err := NewClient(cfg).InitStatus(); err == nil {
-		if v := strVal(st, "login_route"); v != "" && v != cfg.LoginRoute {
-			pl("（服务端实际路由: %s）", v)
-		}
+	if v := loginRouteOf(cfg); v != "" && v != cfg.LoginRoute {
+		pl("（服务端实际路由: %s）", v)
 	}
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { AuthPage } from './pages/AuthPage'
+import { LoginGate } from './pages/LoginGate'
 import { HostsPage } from './pages/HostsPage'
 import { DesktopPage } from './pages/DesktopPage'
 import { api } from './lib/api'
@@ -16,6 +16,7 @@ import { DownloadApp } from './apps/DownloadApp'
 import { OneClickCmdApp } from './apps/OneClickCmdApp'
 import { WebsiteApp } from './apps/WebsiteApp'
 import { tt, useI18n } from './lib/i18n'
+import { DEFAULT_LOGIN_ROUTE } from './lib/routes'
 import { GlobalContextMenu } from './components/GlobalContextMenu'
 
 // 注册内置应用
@@ -100,17 +101,15 @@ registerApp({
 function App() {
   const authed = useSession((s) => s.authed)
   const setAuthed = useSession((s) => s.setAuthed)
-  const setLoginRoute = useSession((s) => s.setLoginRoute)
-  const loginRoute = useSession((s) => s.loginRoute)
   const setLang = useI18n((s) => s.setLang)
   const [routeReady, setRouteReady] = useState(false)
 
   useEffect(() => {
-    // 启动时校验会话 + 读取登录路由配置 + 应用服务器端语言偏好
+    // 启动时校验会话 + 应用服务器端语言偏好
+    // （注意：安全路由的值不再下发，登录入口由 LoginGate 通过 /api/route-check 判定）
     api
       .initStatus()
       .then((s) => {
-        setLoginRoute(s.login_route || '/login')
         setLang(s.lang === 'zh' ? 'zh' : 'en')
         setRouteReady(true)
       })
@@ -119,7 +118,7 @@ function App() {
       .me()
       .then(() => setAuthed(true))
       .catch(() => setAuthed(false))
-  }, [setAuthed, setLoginRoute, setLang])
+  }, [setAuthed, setLang])
 
   if (authed === null || !routeReady) {
     return (
@@ -139,18 +138,21 @@ function App() {
       <GlobalContextMenu />
       <HashRouter>
       <Routes>
-        <Route path={loginRoute} element={<AuthPage />} />
         <Route
           path="/desktop"
-          element={authed ? <DesktopPage /> : <Navigate to={loginRoute} replace />}
+          element={authed ? <DesktopPage /> : <Navigate to={DEFAULT_LOGIN_ROUTE} replace />}
         />
         <Route
           path="/hosts"
-          element={authed ? <HostsPage /> : <Navigate to={loginRoute} replace />}
+          element={authed ? <HostsPage /> : <Navigate to={DEFAULT_LOGIN_ROUTE} replace />}
         />
+        {/*
+          其它所有路径（含首页 / 与手动输入的安全路由）都交给登录闸门：
+          由 POST /api/route-check 判定当前路径能否展示登录页，服务端不下发安全路由的值。
+        */}
         <Route
           path="*"
-          element={<Navigate to={authed ? '/desktop' : loginRoute} replace />}
+          element={authed ? <Navigate to="/desktop" replace /> : <LoginGate />}
         />
       </Routes>
       </HashRouter>

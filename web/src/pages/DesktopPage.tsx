@@ -20,6 +20,7 @@ import { useOsStore } from '../lib/osStore'
 import { useSecuritySettings } from '../lib/securitySettingsStore'
 import { onHostsChanged } from '../lib/hostsBus'
 import { fmtHostPriceShort } from '../lib/hostPrice'
+import { DEFAULT_LOGIN_ROUTE } from '../lib/routes'
 import { useT } from '../lib/i18n'
 import { topEscClose } from '../lib/escClose'
 import { OsLogo } from '../components/OsLogo'
@@ -532,7 +533,8 @@ export function DesktopPage() {
     } finally {
       ws.close()
       useSession.getState().setAuthed(false)
-      navigate(useSession.getState().loginRoute, { replace: true })
+      // 登出后固定回到默认登录路由（安全路由不会自动跳转，需手动输入）
+      navigate(DEFAULT_LOGIN_ROUTE, { replace: true })
     }
   }
 

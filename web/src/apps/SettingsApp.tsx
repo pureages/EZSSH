@@ -227,7 +227,7 @@ export function SettingsApp({ onTitle }: AppProps) {
       const r = await api.updateSettings({ login_route: route.trim() })
       setRoute(r.login_route)
       setRouteOk(true)
-      setRouteMsg(t('安全路由已更新为 {0}，请记牢它', r.login_route))
+      setRouteMsg(t('安全路由已更新为 {0}，请记牢它；此后需手动输入完整地址（含 #）访问登录页。', r.login_route))
     } catch (e) {
       setRouteMsg(transErr(e, '保存失败'))
     } finally {
@@ -658,7 +658,7 @@ export function SettingsApp({ onTitle }: AppProps) {
                 />
               </div>
               <div className="st-tip" style={{ marginBottom: 12 }}>
-                {t('设置后，浏览器只能通过该地址访问登录页（当前为 #/login）。示例：/admin-entry 、/gate-9f3k 。修改后请立即记住，否则将找不到登录入口。')}
+                {t('设置后，只能手动输入「# + 该路由」的完整地址才能打开登录页（示例：#/admin-entry 、#/gate-9f3k）。访问首页或默认地址不会自动跳转到这里，而是提示「路由错误」。修改后请立即记住，否则将找不到登录入口。')}
               </div>
               <button className="btn" disabled={savingRoute} onClick={saveRoute}>
                 {savingRoute ? t('保存中…') : t('保存安全路由')}

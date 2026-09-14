@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -9,19 +10,21 @@ import (
 )
 
 // certDTO 证书对外视图。
+// Domain 为逗号分隔的原始域名串（兼容旧前端）；Domains 为解析后的域名列表（多域名/通配符）。
 type certDTO struct {
-	ID           string `json:"id"`
-	HostID       string `json:"hostId"`
-	HostName     string `json:"hostName"`
-	Domain       string `json:"domain"`
-	Method       string `json:"method"` // http | dns
-	DNSAccountID string `json:"dns_account_id"`
-	Email        string `json:"email"`
-	Status       string `json:"status"` // issuing | active | renewing | error
-	ExpiresAt    string `json:"expires_at"`
-	LastRenew    string `json:"last_renew"`
-	Error        string `json:"error"`
-	CreatedAt    string `json:"created_at"`
+	ID           string   `json:"id"`
+	HostID       string   `json:"hostId"`
+	HostName     string   `json:"hostName"`
+	Domain       string   `json:"domain"`
+	Domains      []string `json:"domains"`
+	Method       string   `json:"method"` // http | dns
+	DNSAccountID string   `json:"dns_account_id"`
+	Email        string   `json:"email"`
+	Status       string   `json:"status"` // issuing | active | renewing | error
+	ExpiresAt    string   `json:"expires_at"`
+	LastRenew    string   `json:"last_renew"`
+	Error        string   `json:"error"`
+	CreatedAt    string   `json:"created_at"`
 }
 
 func (s *Server) certToDTO(c *store.Certificate) certDTO {
@@ -31,7 +34,8 @@ func (s *Server) certToDTO(c *store.Certificate) certDTO {
 	}
 	return certDTO{
 		ID: c.ID, HostID: c.HostID, HostName: name, Domain: c.Domain,
-		Method: c.Method, DNSAccountID: c.DNSAccountID, Email: c.Email,
+		Domains: c.Domains(),
+		Method:  c.Method, DNSAccountID: c.DNSAccountID, Email: c.Email,
 		Status: c.Status, ExpiresAt: c.ExpiresAt, LastRenew: c.LastRenew,
 		Error: c.Error, CreatedAt: c.CreatedAt,
 	}
@@ -52,34 +56,64 @@ func (s *Server) handleListCertificates(w http.ResponseWriter, r *http.Request) 
 }
 
 // issueReq 证书签发请求。
+// Domain 支持多域名：以逗号 / 分号 / 空白（含换行）分隔，第 1 个为主域名；
+// 通配符（*.example.com）只能使用 DNS 验证。
 type issueReq struct {
-	HostID        string `json:"host_id"`
-	WebsiteID     string `json:"website_id"` // 可选：签发成功后回填站点 cert_id
-	Domain        string `json:"domain"`
-	Method        string `json:"method"` // http | dns
-	DNSAccountID  string `json:"dns_account_id"`
-	Email         string `json:"email"`
-	Webroot       string `json:"webroot"` // method=http 时使用
+	HostID       string `json:"host_id"`
+	WebsiteID    string `json:"website_id"` // 可选：签发成功后回填站点 cert_id
+	Domain       string `json:"domain"`
+	Method       string `json:"method"` // http | dns
+	DNSAccountID string `json:"dns_account_id"`
+	Email        string `json:"email"`
+	Webroot      string `json:"webroot"` // method=http 时使用
+	// Wildcard 由 validate 填充：域名列表中是否含通配符域名（仅内部使用，不参与 JSON 解析）
+	Wildcard bool `json:"-"`
 }
+
+// maxCertDomains 单张证书最多允许的域名数（Let's Encrypt 单证书 SAN 上限为 100，此处收紧到 20）。
+const maxCertDomains = 20
 
 func (r *issueReq) validate() (string, bool) {
 	r.HostID = strings.TrimSpace(r.HostID)
-	r.Domain = strings.TrimSpace(strings.ToLower(r.Domain))
 	r.Method = strings.TrimSpace(r.Method)
 	if r.HostID == "" {
 		return "host_id is required", false
 	}
-	if bad, ok := validateDomains(r.Domain); !ok {
-		return "invalid domain: " + bad, false
+	domains := store.SplitDomainList(r.Domain)
+	if len(domains) == 0 {
+		return "domain is required", false
 	}
+	if len(domains) > maxCertDomains {
+		return "too many domains (max 20)", false
+	}
+	wildcard := false
+	for _, d := range domains {
+		if !certDomainRe.MatchString(d) {
+			return "invalid domain: " + d, false
+		}
+		if strings.HasPrefix(d, "*.") {
+			wildcard = true
+		}
+	}
+	// 归一化后回写（小写、去重、逗号分隔），并记录是否含通配符
+	r.Domain = strings.Join(domains, ",")
+	r.Wildcard = wildcard
+
 	if r.Method != "http" && r.Method != "dns" {
 		return "method must be http or dns", false
+	}
+	// 通配符只能通过 DNS-01 验证（HTTP-01 无法签发泛域名）
+	if wildcard && r.Method != "dns" {
+		return "wildcard domains require dns method", false
 	}
 	if r.Method == "dns" && strings.TrimSpace(r.DNSAccountID) == "" {
 		return "dns_account_id is required for dns method", false
 	}
 	return "", true
 }
+
+// certDomainRe 证书域名：允许最左标签为通配符（*.example.com），且至少包含一个点。
+var certDomainRe = regexp.MustCompile(`^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$`)
 
 // POST /api/certificates/issue 签发证书（NDJSON 流式进度）。
 func (s *Server) handleIssueCertificate(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +178,8 @@ func (s *Server) handleIssueCertificate(w http.ResponseWriter, r *http.Request) 
 		cfToken = string(token)
 	}
 
-	if err := s.cert.Issue(req.HostID, req.Domain, req.Method, cfToken, req.Webroot, line); err != nil {
+	domains := store.SplitDomainList(req.Domain)
+	if err := s.cert.Issue(req.HostID, domains, req.Method, cfToken, req.Webroot, line); err != nil {
 		fail(err.Error())
 		return
 	}
@@ -152,7 +187,7 @@ func (s *Server) handleIssueCertificate(w http.ResponseWriter, r *http.Request) 
 	// 签发成功：读取到期时间并更新记录；读取失败说明证书未安装到位，标记 error 提示
 	expires, serr := s.cert.CertStatus(req.HostID, req.Domain)
 	if serr != nil {
-		fail("证书已签发但未安装到 /etc/nginx/ssl/" + req.Domain + "/: " + serr.Error())
+		fail("证书已签发但未安装到 /etc/nginx/ssl/" + domains[0] + "/: " + serr.Error())
 		return
 	}
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
@@ -230,7 +265,7 @@ func (s *Server) handleSyncCertificate(w http.ResponseWriter, r *http.Request) {
 	expires, serr := s.cert.CertStatus(cert.HostID, cert.Domain)
 	if serr != nil {
 		// 证书文件不存在 → 标记为未安装（error 状态），提示先重新签发/续签安装
-		_ = s.st.UpdateCertificateState(id, "error", cert.ExpiresAt, cert.LastRenew, "证书未安装到 /etc/nginx/ssl/"+cert.Domain+"/（点击「续签」可强制重装）: "+serr.Error())
+		_ = s.st.UpdateCertificateState(id, "error", cert.ExpiresAt, cert.LastRenew, "证书未安装到 /etc/nginx/ssl/"+cert.PrimaryDomain()+"/（点击「续签」可强制重装）: "+serr.Error())
 		updated, _ := s.st.GetCertificate(id)
 		writeJSON(w, http.StatusOK, s.certToDTO(updated))
 		return

@@ -1,6 +1,6 @@
 # EZSSH User Guide
 
-A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.7 · Updated 2026-09-14
+A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.7-2 · Updated 2026-09-14
 
 ## Table of Contents
 
@@ -76,6 +76,7 @@ After login you enter a Windows-like web desktop to manage all servers with wind
 - **Server icons**: double-click to open the file manager; right-click for a context menu (Terminal / Files / Task Manager / Docker / Firewall / Downloads / Edit); drag with the left button to reposition. Icons show the system logo, country flag and a three-line mini monitor (CPU|Memory|Disk, upload/download rates, total traffic).
 - **Server card view**: choose "Card mode" from the desktop's right-click menu to show servers as cards with online status, system logo, country flag, mini monitor, **price** and the **expiration date**; cards can be dragged to custom positions. The expiration date and price (amount + currency + billing cycle) can be set when adding/editing a server; the date is highlighted when expiring soon (within 7 days) or already expired.
 - **File upload**: the file manager supports dragging local files directly into the window to upload (drop onto a folder row to upload into that folder), and the "Upload" button supports selecting multiple files; folders in the "Quick Access" sidebar can be dragged up/down to reorder.
+- **Website Manager**: visual site creation (static / reverse proxy / redirect) and Let's Encrypt certificate issuance; a single certificate can cover **multiple domains (SAN)** and **wildcards** (e.g. `*.example.com`). Wildcards can only be validated via DNS (HTTP-01 cannot validate them) — the panel switches automatically.
 - **Taskbar & App Center**: the bottom taskbar manages open windows; the 🪟 button opens the App Center (Add Server, Settings, Downloads, Quick Commands, Websites, Card mode).
 - **Background progress**: long-running operations (Nginx install, site deployment, certificate issuance, file copy/paste, etc.) can be minimized to run in the background — the taskbar badge auto-collapses on success, and the window restores automatically to show an error on failure.
 
@@ -131,7 +132,7 @@ On the Windows server to be added, run the following commands in PowerShell as A
 - **Credential vault**: host passwords / private keys are encrypted with AES-256-GCM; the key is derived from the login passphrase via Argon2id. After a restart you must log in again to unlock.
 - **Re-encryption on password change**: changing the passphrase derives a new key and re-encrypts all host credentials; the old passphrase can no longer decrypt them.
 - **Login captcha**: after a failed login from an IP, an SVG captcha is required (single-use, 5-minute expiry); 5 failures per minute lock out the IP for 5 minutes.
-- **Custom login route**: the login page address can be changed (e.g. `/secret-admin`) under Settings → Security to hide the entry point.
+- **Custom login route**: the login page address can be changed (e.g. `/secret-admin`) under Settings → Security. Once set, visiting the homepage does **not** redirect to it (a "Route Error" is shown instead) — you must enter the full address manually (e.g. `#/secret-admin`) to open the login page. The address is **never exposed by any public API** (the frontend only asks whether the current path is allowed) and probing is rate-limited.
 - **TOFU host key confirmation**: the remote host key fingerprint is recorded on first connection and verified afterwards, preventing man-in-the-middle replacement.
 - **Audit logging of risky operations**: login / connect / kill / container delete / password change / settings change are all written to the audit log.
 - **Web security**: terminal output is rendered only through xterm and never touches the DOM (XSS protection); SQL is parameterized; the captcha SVG is generated server-side.

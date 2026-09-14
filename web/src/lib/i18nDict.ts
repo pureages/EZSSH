@@ -132,7 +132,13 @@ export const enDict: Record<string, string> = {
   '新密码至少 8 位': 'New password must be at least 8 characters.',
   两次输入的新密码不一致: 'The two new passwords do not match.',
   密码修改成功下次登录请使用新密码: 'Password changed. Use the new password next time you log in.',
-  '安全路由已更新为 {0}，请记牢它': 'Security route updated to {0}. Remember it.',
+  '安全路由已更新为 {0}，请记牢它；此后需手动输入完整地址（含 #）访问登录页。':
+    'Security route updated to {0}. Remember it — from now on you must manually enter the full address (including #) to reach the login page.',
+  // 路由错误页（启用安全路由后，访问首页/默认地址不再是登录页）
+  路由错误: 'Route Error',
+  '当前访问路径无效，无法打开登录页。': 'The current path is invalid, so the login page cannot be opened.',
+  '请手动输入完整的访问地址（含 # 与安全路由）后重试。':
+    'Please enter the full address manually (including # and the security route) and try again.',
   '已应用主题「{0}」': 'Theme "{0}" applied.',
   '你干净、高效、可视化的自托管中心化SSH Web网关。': 'Your clean, efficient, visual self-hosted centralized SSH web gateway.',
   显示所有桌面隐藏的服务器: 'Show all hidden desktop servers',
@@ -711,7 +717,7 @@ export const enDict: Record<string, string> = {
   '新密码（至少 8 位）': 'New Password (min 8 chars)',
   '修改中…': 'Updating…',
   '🛡️ 安全路由': '🛡️ Security Route',
-  '设置后，浏览器只能通过该地址访问登录页（当前为 #/login）。示例：/admin-entry 、/gate-9f3k 。修改后请立即记住，否则将找不到登录入口。': 'After this is set, the login page is only reachable at this address (currently #/login). Examples: /admin-entry , /gate-9f3k . Remember it immediately, or you will not find the login page.',
+  '设置后，只能手动输入「# + 该路由」的完整地址才能打开登录页（示例：#/admin-entry 、#/gate-9f3k）。访问首页或默认地址不会自动跳转到这里，而是提示「路由错误」。修改后请立即记住，否则将找不到登录入口。': 'After this is set, the login page can only be opened by manually entering the full address ("#" + this route), e.g. #/admin-entry or #/gate-9f3k. Visiting the homepage or the default address will not redirect here — it shows a "Route Error" instead. Remember it immediately, or you will not find the login page.',
   保存安全路由: 'Save Security Route',
   '🖥️ 桌面隐藏的服务器': '🖥️ Hidden Desktop Servers',
   '当前有 {0} 台服务器图标在桌面被隐藏。点击下方按钮可一次性恢复显示。': '{0} server icon(s) are currently hidden on the desktop. Click the button below to restore them all.',
@@ -898,6 +904,16 @@ export const enDict: Record<string, string> = {
   '证书已安装，到期时间 {0}': 'Certificate installed, expires {0}',
   '该域名证书未安装到 /etc/nginx/ssl/域名/，请先在「证书」页签签发或续签，否则部署时将降级为 HTTP。': 'Certificate is not installed to /etc/nginx/ssl/<domain>/. Issue or renew it in the Certificates tab first, otherwise deployment will fall back to HTTP.',
   '到期时间': 'Expires',
+  // ===== 证书签发：多域名与泛域名 =====
+  '域名（支持多域名与泛域名）': 'Domains (multiple & wildcard supported)',
+  '每行一个或用逗号分隔，可同时签发多域名（SAN）；第 1 个为主域名（证书安装目录以其命名）。泛域名如 *.example.com 只能使用 DNS 验证。':
+    'One domain per line or comma-separated; multiple domains (SAN) can be issued in one certificate. The first one is the main domain (used to name the certificate install directory). Wildcards such as *.example.com can only be validated via DNS.',
+  '主域名': 'Main domain',
+  '检测到泛域名：已自动使用 DNS 验证（HTTP-01 无法验证泛域名）。':
+    'Wildcard detected: DNS validation is selected automatically (HTTP-01 cannot validate wildcards).',
+  '个域名': 'domains',
+  '多个域名用逗号分隔，可使用泛域名 *.example.com（nginx server_name 支持；其证书需使用 DNS 验证签发）。':
+    'Separate multiple domains with commas. A wildcard such as *.example.com is supported (valid in nginx server_name; its certificate must be issued via DNS validation).',
   '删除网站 {0}': 'Delete site {0}',
   '确定删除网站「{0}」？此操作会移除服务器上的 Nginx 配置并清理证书，且不可恢复。': 'Delete site "{0}"? This will remove the Nginx config on the server and clean up certificates. This cannot be undone.',
   '请输入域名 {0} 以确认删除：': 'Type the domain {0} to confirm deletion:',

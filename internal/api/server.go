@@ -20,24 +20,24 @@ import (
 
 // Server 聚合各依赖并提供 HTTP 路由。
 type Server struct {
-	st          *store.Store
-	v           *vault.Vault
-	am          *auth.Manager
+	st *store.Store
+	v  *vault.Vault
+	am *auth.Manager
 	// Version 网关版本号（由 main 注入，可用 ldflags 覆盖）。
-	Version     string
-	hub         *sshhub.Hub
-	sftp        *apps.SFTPManager
-	copyMgr     *apps.CopyManager
-	monitor     *apps.Monitor
-	procs       *apps.ProcessManager
-	docker      *apps.DockerManager
-	firewall    *apps.FirewallManager
-	download    *apps.DownloadManager
-	bg          *apps.BackgroundManager
-	nginx       *apps.NginxManager
-	cert        *apps.CertManager
-	captcha     *captcha.Manager
-	muSub       sync.Mutex
+	Version  string
+	hub      *sshhub.Hub
+	sftp     *apps.SFTPManager
+	copyMgr  *apps.CopyManager
+	monitor  *apps.Monitor
+	procs    *apps.ProcessManager
+	docker   *apps.DockerManager
+	firewall *apps.FirewallManager
+	download *apps.DownloadManager
+	bg       *apps.BackgroundManager
+	nginx    *apps.NginxManager
+	cert     *apps.CertManager
+	captcha  *captcha.Manager
+	muSub    sync.Mutex
 	// monitorSubs: hostID -> subID -> 订阅连接。subID 区分同一连接上的不同订阅者
 	//（如桌面图标订阅、监控窗口订阅），全部取消后才停止该主机的采集。
 	monitorSubs map[string]map[string]*wsConn
@@ -45,16 +45,16 @@ type Server struct {
 
 func New(st *store.Store, v *vault.Vault, am *auth.Manager, hub *sshhub.Hub) *Server {
 	s := &Server{
-		st:      st,
-		v:       v,
-		am:      am,
-		hub:     hub,
-		sftp:    apps.NewSFTPManager(hub),
-		monitor: apps.NewMonitor(hub),
-		procs:   apps.NewProcessManager(hub),
-		docker:  apps.NewDockerManager(hub),
+		st:       st,
+		v:        v,
+		am:       am,
+		hub:      hub,
+		sftp:     apps.NewSFTPManager(hub),
+		monitor:  apps.NewMonitor(hub),
+		procs:    apps.NewProcessManager(hub),
+		docker:   apps.NewDockerManager(hub),
 		firewall: apps.NewFirewallManager(hub),
-		captcha: captcha.NewManager(),
+		captcha:  captcha.NewManager(),
 	}
 	s.copyMgr = apps.NewCopyManager(hub, s.sftp)
 	s.download = apps.NewDownloadManager(hub)
@@ -84,6 +84,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/init", s.handleInit)
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("GET /api/captcha", s.handleCaptcha)
+	// 登录入口校验：安全路由值不下发，前端只能「按当前路径询问能否展示登录页」
+	mux.HandleFunc("POST /api/route-check", s.handleRouteCheck)
 
 	// 需认证
 	mux.HandleFunc("POST /api/logout", s.requireAuth(s.handleLogout))

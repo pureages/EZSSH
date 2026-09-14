@@ -56,6 +56,35 @@ const emptyForm = (hostId: string): SiteForm => ({
   ssl: false,
 })
 
+/** 解析多域名输入：逗号 / 分号 / 空白（含换行）分隔，去空、去重、统一小写并保持顺序。 */
+function parseDomains(s: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of s.split(/[\s,;]+/)) {
+    const d = part.trim().toLowerCase()
+    if (!d || seen.has(d)) continue
+    seen.add(d)
+    out.push(d)
+  }
+  return out
+}
+
+/** 是否为通配符（泛）域名：*.example.com */
+function isWildcardDomain(d: string): boolean {
+  return d.startsWith('*.')
+}
+
+/** 证书覆盖的域名列表（旧数据无 domains 字段时回退解析 domain）。 */
+function certDomainsOf(c: Certificate): string[] {
+  if (c.domains && c.domains.length > 0) return c.domains
+  return parseDomains(c.domain)
+}
+
+/** 证书主域名（acme.sh 证书目录与 /etc/nginx/ssl/<主域名>/ 以其命名）。 */
+function certPrimaryOf(c: Certificate): string {
+  return certDomainsOf(c)[0] || c.domain
+}
+
 /** 网站管理：Nginx 建站 + Let's Encrypt 证书。跨服务器浏览（App Center 全局卡片）。 */
 export function WebsiteApp({ onTitle }: AppProps) {
   const t = useT()
@@ -103,6 +132,10 @@ export function WebsiteApp({ onTitle }: AppProps) {
     email: string
     webroot: string
   }>({ website_id: '', domain: '', method: 'dns', dns_account_id: '', email: '', webroot: '' })
+
+  /** 多域名输入解析结果；含通配符时只能用 DNS-01 验证 */
+  const issueDomains = useMemo(() => parseDomains(issue.domain), [issue.domain])
+  const issueWildcard = issueDomains.some(isWildcardDomain)
 
   // DNS 账户表单
   const [dnsFormOpen, setDnsFormOpen] = useState(false)
@@ -197,6 +230,13 @@ export function WebsiteApp({ onTitle }: AppProps) {
       cancelled = true
     }
   }, [formOpen, form.ssl, form.hostId, form.domains])
+
+  // 泛域名（*.example.com）只能通过 DNS-01 验证：检测到通配符时自动切回 DNS
+  useEffect(() => {
+    if (issueOpen && issueWildcard && issue.method !== 'dns') {
+      setIssue((i) => ({ ...i, method: 'dns' }))
+    }
+  }, [issueOpen, issueWildcard, issue.method])
 
   const changeHost = (id: string) => {
     const h = hosts.find((x) => x.id === id)
@@ -430,22 +470,28 @@ export function WebsiteApp({ onTitle }: AppProps) {
     setIssue((prev) => ({
       ...prev,
       website_id: websiteId,
-      domain: ws ? primaryDomain(ws) : prev.domain,
+      // 站点可能配置了多个域名（含泛域名）：一并填入，避免逐个手输
+      domain: ws ? parseDomains(ws.domains).join(', ') : prev.domain,
       webroot: ws && ws.site_type === 'static' ? ws.root_dir : prev.webroot,
     }))
   }
 
   const issueCert = async () => {
-    if (!issue.domain.trim()) return
+    const domains = issueDomains
+    if (domains.length === 0) return
     const ws = sites.find((s) => s.id === issue.website_id)
-    const ok = await runProgress(t('正在签发证书 {0}…', issue.domain.trim()), (onLine) =>
+    // 含通配符时强制 DNS 验证（HTTP-01 无法签发泛域名），后端亦会二次校验
+    const method: 'http' | 'dns' = issueWildcard ? 'dns' : issue.method
+    const title =
+      domains.length > 1 ? `${domains[0]} +${domains.length - 1}` : domains[0]
+    const ok = await runProgress(t('正在签发证书 {0}…', title), (onLine) =>
       api.certIssue(
         {
           host_id: selHostId,
           website_id: ws ? ws.id : undefined,
-          domain: issue.domain.trim(),
-          method: issue.method,
-          dns_account_id: issue.method === 'dns' ? issue.dns_account_id : '',
+          domain: domains.join(','),
+          method,
+          dns_account_id: method === 'dns' ? issue.dns_account_id : '',
           email: issue.email.trim(),
           webroot: issue.webroot.trim(),
         },
@@ -460,7 +506,9 @@ export function WebsiteApp({ onTitle }: AppProps) {
   }
 
   const renewCert = async (c: Certificate) => {
-    const ok = await runProgress(t('正在续签证书 {0}…', c.domain), (onLine) => api.certRenew(c.id, onLine))
+    const ok = await runProgress(t('正在续签证书 {0}…', certPrimaryOf(c)), (onLine) =>
+      api.certRenew(c.id, onLine),
+    )
     if (ok) void loadHostData(selHostId)
   }
 
@@ -474,7 +522,7 @@ export function WebsiteApp({ onTitle }: AppProps) {
   }
 
   const deleteCert = async (c: Certificate) => {
-    if (!window.confirm(t('删除证书记录「{0}」？远端 acme.sh 证书保留。', c.domain))) return
+    if (!window.confirm(t('删除证书记录「{0}」？远端 acme.sh 证书保留。', certPrimaryOf(c)))) return
     try {
       await api.certDelete(c.id)
       await loadHostData(selHostId)
@@ -782,7 +830,17 @@ export function WebsiteApp({ onTitle }: AppProps) {
                 <tbody>
                   {certs.map((c) => (
                     <tr key={c.id}>
-                      <td style={tdStyle}>{c.domain}</td>
+                      <td style={tdStyle}>
+                        <div>{certPrimaryOf(c)}</div>
+                        {certDomainsOf(c).length > 1 && (
+                          <div
+                            style={{ fontSize: 11, color: 'var(--text-1)' }}
+                            title={certDomainsOf(c).join('\n')}
+                          >
+                            +{certDomainsOf(c).length - 1} {t('个域名')}
+                          </div>
+                        )}
+                      </td>
                       <td style={tdStyle}>
                         <span className="tag">{c.method === 'dns' ? 'DNS-01' : 'HTTP-01'}</span>
                       </td>
@@ -818,7 +876,7 @@ export function WebsiteApp({ onTitle }: AppProps) {
                   .filter((c) => c.error)
                   .map((c) => (
                     <div key={c.id} style={{ marginTop: 4, color: 'var(--red)' }}>
-                      {c.domain}: {c.error}
+                      {certPrimaryOf(c)}: {c.error}
                     </div>
                   ))}
               </div>
@@ -914,6 +972,9 @@ export function WebsiteApp({ onTitle }: AppProps) {
                 }}
                 placeholder={t('example.com（多个用逗号分隔）')}
               />
+              <div style={{ fontSize: 11, color: 'var(--text-1)', marginTop: 6, lineHeight: 1.7 }}>
+                {t('多个域名用逗号分隔，可使用泛域名 *.example.com（nginx server_name 支持；其证书需使用 DNS 验证签发）。')}
+              </div>
             </div>
             <div className="field" style={{ marginBottom: 12 }}>
               <label>{t('站点名称')}</label>
@@ -1062,12 +1123,33 @@ export function WebsiteApp({ onTitle }: AppProps) {
               </select>
             </div>
             <div className="field" style={{ marginBottom: 12 }}>
-              <label>{t('域名')}</label>
-              <input
+              <label>{t('域名（支持多域名与泛域名）')}</label>
+              <textarea
                 value={issue.domain}
                 onChange={(e) => setIssue((i) => ({ ...i, domain: e.target.value }))}
-                placeholder={t('example.com')}
+                placeholder={'example.com\nwww.example.com\n*.example.com'}
+                rows={4}
+                spellCheck={false}
+                style={{ fontFamily: 'Consolas, Menlo, monospace' }}
               />
+              <div style={{ fontSize: 11, color: 'var(--text-1)', marginTop: 6, lineHeight: 1.7 }}>
+                {t('每行一个或用逗号分隔，可同时签发多域名（SAN）；第 1 个为主域名（证书安装目录以其命名）。泛域名如 *.example.com 只能使用 DNS 验证。')}
+              </div>
+              {issueDomains.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {issueDomains.map((d, i) => (
+                    <span
+                      key={d}
+                      className="tag"
+                      title={i === 0 ? t('主域名') : undefined}
+                      style={isWildcardDomain(d) ? { color: '#c084fc' } : undefined}
+                    >
+                      {d}
+                      {i === 0 ? ' ★' : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="field" style={{ marginBottom: 12 }}>
               <label>{t('验证方式')}</label>
@@ -1076,8 +1158,15 @@ export function WebsiteApp({ onTitle }: AppProps) {
                 onChange={(e) => setIssue((i) => ({ ...i, method: e.target.value as 'http' | 'dns' }))}
               >
                 <option value="dns">{t('DNS 验证（Cloudflare，推荐）')}</option>
-                <option value="http">{t('HTTP 验证（需服务器 80 端口公网可达）')}</option>
+                <option value="http" disabled={issueWildcard}>
+                  {t('HTTP 验证（需服务器 80 端口公网可达）')}
+                </option>
               </select>
+              {issueWildcard && (
+                <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6, lineHeight: 1.7 }}>
+                  {t('检测到泛域名：已自动使用 DNS 验证（HTTP-01 无法验证泛域名）。')}
+                </div>
+              )}
             </div>
             {issue.method === 'dns' ? (
               <div className="field" style={{ marginBottom: 12 }}>
@@ -1112,7 +1201,7 @@ export function WebsiteApp({ onTitle }: AppProps) {
               <button className="btn btn-ghost" onClick={() => setIssueOpen(false)}>
                 {t('取消')}
               </button>
-              <button className="btn" disabled={!issue.domain.trim()} onClick={() => void issueCert()}>
+              <button className="btn" disabled={issueDomains.length === 0} onClick={() => void issueCert()}>
                 {t('签发')}
               </button>
             </div>

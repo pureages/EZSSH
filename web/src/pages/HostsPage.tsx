@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useT, transErr } from '../lib/i18n'
+import { DEFAULT_LOGIN_ROUTE } from '../lib/routes'
 import { fmtHostPrice } from '../lib/hostPrice'
 import { HostFormModal } from '../components/HostFormModal'
 import type { Host } from '../lib/types'
@@ -62,7 +63,8 @@ export function HostsPage() {
   const logout = async () => {
     await api.logout()
     useSession.getState().setAuthed(false)
-    navigate(useSession.getState().loginRoute, { replace: true })
+    // 登出后固定回到默认登录路由（安全路由不会自动跳转，需手动输入）
+    navigate(DEFAULT_LOGIN_ROUTE, { replace: true })
   }
 
   return (

@@ -3,6 +3,7 @@ package store
 import "database/sql"
 
 // Certificate 对应 certificates 表（Let's Encrypt 证书记录）。
+// Domain 存储该证书覆盖的域名列表，逗号分隔（第 1 个为主域名，支持 *.example.com 通配符）。
 type Certificate struct {
 	ID           string
 	HostID       string
@@ -15,6 +16,19 @@ type Certificate struct {
 	LastRenew    string
 	Error        string
 	CreatedAt    string
+}
+
+// Domains 返回证书覆盖的域名列表（第 1 个为主域名）。
+func (c *Certificate) Domains() []string {
+	return SplitDomainList(c.Domain)
+}
+
+// PrimaryDomain 返回主域名：acme.sh 的证书目录与 /etc/nginx/ssl/<主域名>/ 均以其命名。
+func (c *Certificate) PrimaryDomain() string {
+	if ds := SplitDomainList(c.Domain); len(ds) > 0 {
+		return ds[0]
+	}
+	return ""
 }
 
 func scanCert(row interface{ Scan(...any) error }) (*Certificate, error) {
@@ -89,7 +103,7 @@ func (s *Store) DeleteCertificate(id string) error {
 
 // ListActiveCertificates 返回非 error 状态的证书记录（供自动续签遍历）。
 func (s *Store) ListActiveCertificates() ([]*Certificate, error) {
-	rows, err := s.db.Query(`SELECT `+certCols+` FROM certificates WHERE status != 'error'`)
+	rows, err := s.db.Query(`SELECT ` + certCols + ` FROM certificates WHERE status != 'error'`)
 	if err != nil {
 		return nil, err
 	}

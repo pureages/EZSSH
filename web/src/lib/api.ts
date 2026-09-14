@@ -181,6 +181,16 @@ export const api = {
 
   me: () => request<MeInfo>('/api/me', { silent401: true }),
 
+  /**
+   * 判断给定路径是否为登录入口（安全路由的值不会下发）。
+   * 服务端只回答「该路径能否展示登录页」，并按 IP 限流防止枚举探测。
+   */
+  routeCheck: (path: string) =>
+    request<{ ok: boolean }>('/api/route-check', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
+
   // ---- 设置 ----
   getSettings: () => request<{ login_route: string; lang: string; hide_fm_username: string }>('/api/settings'),
   updateSettings: (opts: { login_route?: string; lang?: string; hide_fm_username?: string }) =>

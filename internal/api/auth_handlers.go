@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -12,12 +13,11 @@ func (s *Server) initialized() bool {
 	return err == nil && n > 0
 }
 
-// GET /api/init-status → { initialized, unlocked, login_route, lang, version }
+// GET /api/init-status → { initialized, unlocked, lang, version }
+//
+// 注意：**不返回 login_route（安全路由）**——该值只通过需认证的 /api/settings 提供给设置页，
+// 未认证的公开接口一律不下发，前端改用 /api/route-check 按「当前路径」询问能否展示登录页。
 func (s *Server) handleInitStatus(w http.ResponseWriter, r *http.Request) {
-	route, _ := s.st.GetSetting(settingLoginRoute)
-	if route == "" {
-		route = "/login"
-	}
 	lang, _ := s.st.GetSetting(settingLang)
 	if lang == "" {
 		lang = "en"
@@ -25,10 +25,77 @@ func (s *Server) handleInitStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"initialized": s.initialized(),
 		"unlocked":    s.v.IsUnlocked(),
-		"login_route": route,
 		"lang":        lang,
 		"version":     s.Version,
 	})
+}
+
+// defaultLoginRoute 默认登录路由：未配置安全路由时使用（也是前端兜底跳转的目标）。
+const defaultLoginRoute = "/login"
+
+// normalizeRoutePath 归一化路由路径：去空白、去掉 ?query / #hash、补前导 /、去掉末尾 /、统一小写。
+// 返回空串表示非法路径（前端应视为不匹配）。
+func normalizeRoutePath(p string) string {
+	p = strings.TrimSpace(p)
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	for len(p) > 1 && strings.HasSuffix(p, "/") {
+		p = p[:len(p)-1]
+	}
+	return strings.ToLower(p)
+}
+
+// routeMatches 归一化后以常量时间比较路径与登录路由（避免通过响应耗时侧信道推断）。
+func routeMatches(path, route string) bool {
+	p := normalizeRoutePath(path)
+	r := normalizeRoutePath(route)
+	if p == "" || r == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(p), []byte(r)) == 1
+}
+
+// POST /api/route-check 判断给定路径是否为登录入口。
+// 请求 { path }，响应 { ok }：ok=true 表示该路径可以展示登录页。
+//
+// 出于安全考虑本接口不返回、也无法推断出安全路由本身；失败按 IP 限流以阻止枚举探测。
+func (s *Server) handleRouteCheck(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if !s.am.CanProbeRoute(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "too many attempts"})
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	route, _ := s.st.GetSetting(settingLoginRoute)
+	if route == "" {
+		route = defaultLoginRoute
+	}
+	path := normalizeRoutePath(req.Path)
+	if !routeMatches(path, route) {
+		// 默认 /login 不是秘密，且启用安全路由后它必然不匹配（首页/兜底都会走到这里），
+		// 因此不计入枚举失败数，避免正常访问被自己刷新触发限流。
+		if path != defaultLoginRoute {
+			s.am.RecordRouteProbeFail(ip)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false})
+		return
+	}
+	s.am.ClearRouteProbe(ip)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // POST /api/init 首次初始化：创建管理员口令并解锁保险库。
@@ -85,7 +152,7 @@ func (s *Server) handleInit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loginFail(w http.ResponseWriter, ip string, msg string) {
 	s.am.RecordFail(ip)
 	writeJSON(w, http.StatusUnauthorized, map[string]any{
-		"error":         msg,
+		"error":        msg,
 		"need_captcha": s.am.FailCount(ip) >= 1,
 	})
 }
@@ -113,7 +180,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if s.am.FailCount(ip) >= 1 {
 		if !s.captcha.Verify(req.CaptchaID, req.CaptchaCode) {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{
-				"error":         "验证码错误或已过期",
+				"error":        "验证码错误或已过期",
 				"need_captcha": true,
 			})
 			return
@@ -170,7 +237,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"username":       username,
+		"username":      username,
 		"vaultUnlocked": s.v.IsUnlocked(),
 	})
 }

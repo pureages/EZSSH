@@ -50,10 +50,13 @@ func TestLoginRouteSetting(t *testing.T) {
 		t.Fatalf("update settings: %d %v", code, settings)
 	}
 
-	// init-status 应返回新路由
+	// init-status 是公开接口，绝不能泄露安全路由
 	code, initStatus, _ := doJSON(t, "GET", ts.URL+"/api/init-status", "", nil)
-	if code != 200 || initStatus["login_route"] != "/secret-admin" {
-		t.Fatalf("init-status login_route: %d %v", code, initStatus)
+	if code != 200 {
+		t.Fatalf("init-status: %d %v", code, initStatus)
+	}
+	if _, leaked := initStatus["login_route"]; leaked {
+		t.Fatalf("init-status must not expose login_route: %v", initStatus)
 	}
 
 	// 非法路由应拒绝
