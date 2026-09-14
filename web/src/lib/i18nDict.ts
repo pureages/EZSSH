@@ -901,8 +901,8 @@ export const enDict: Record<string, string> = {
   '暂无网站，点击右上角「添加网站」开始建站。': 'No sites yet. Click "Add Website" in the top right to get started.',
   '启用 SSL（需先在「证书」页签为域名签发 Let\'s Encrypt 证书）': 'Enable SSL (issue a Let\'s Encrypt certificate for the domain in the Certificates tab first)',
   '检测证书状态…': 'Checking certificate…',
-  '证书已安装，到期时间 {0}': 'Certificate installed, expires {0}',
-  '该域名证书未安装到 /etc/nginx/ssl/域名/，请先在「证书」页签签发或续签，否则部署时将降级为 HTTP。': 'Certificate is not installed to /etc/nginx/ssl/<domain>/. Issue or renew it in the Certificates tab first, otherwise deployment will fall back to HTTP.',
+  '证书已安装（{0}），到期时间 {1}': 'Certificate installed ({0}), expires {1}',
+  '未找到覆盖该域名的证书（/etc/nginx/ssl/<域名>/ 或上一级泛域名目录），请先在「证书」页签签发或续签，否则部署时将降级为 HTTP。': 'No certificate covering this domain was found (/etc/nginx/ssl/<domain>/ or the parent wildcard directory). Issue or renew it in the Certificates tab first, otherwise deployment will fall back to HTTP.',
   '到期时间': 'Expires',
   // ===== 证书签发：多域名与泛域名 =====
   '域名（支持多域名与泛域名）': 'Domains (multiple & wildcard supported)',

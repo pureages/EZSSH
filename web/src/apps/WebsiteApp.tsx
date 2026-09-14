@@ -108,11 +108,17 @@ export function WebsiteApp({ onTitle }: AppProps) {
   const [form, setForm] = useState<SiteForm>(emptyForm(''))
   const [formErr, setFormErr] = useState('')
 
-  // SSL 勾选时的证书可用性检测（已安装到 /etc/nginx/ssl/<域名>/）
-  const [sslCheck, setSslCheck] = useState<{ checking: boolean; installed: boolean | null; expiresAt: string }>({
+  // SSL 勾选时的证书可用性检测（精确目录 /etc/nginx/ssl/<域名>/ 或上一级泛域名目录）
+  const [sslCheck, setSslCheck] = useState<{
+    checking: boolean
+    installed: boolean | null
+    expiresAt: string
+    certName: string
+  }>({
     checking: false,
     installed: null,
     expiresAt: '',
+    certName: '',
   })
 
   // 删除确认（输入域名）
@@ -208,23 +214,36 @@ export function WebsiteApp({ onTitle }: AppProps) {
     if (selHostId) void loadSites(selHostId, selGroup)
   }, [selHostId, selGroup, loadSites])
 
-  // 表单勾选 SSL 时，检测域名证书是否已安装到 /etc/nginx/ssl/<域名>/
+  // 表单勾选 SSL 时，检测「覆盖该站点域名」的证书是否已安装：
+  // 精确目录 /etc/nginx/ssl/<域名>/ 优先，其次上一级泛域名目录（*.wyj.me 可用于 www.wyj.me）
   useEffect(() => {
     if (!formOpen || !form.ssl || !form.hostId) {
-      setSslCheck((c) => (c.checking || c.installed !== null ? { checking: false, installed: null, expiresAt: '' } : c))
+      setSslCheck((c) =>
+        c.checking || c.installed !== null
+          ? { checking: false, installed: null, expiresAt: '', certName: '' }
+          : c,
+      )
       return
     }
-    const primary = form.domains.split(',')[0].trim()
-    if (!primary) return
+    const domains = form.domains.trim()
+    if (!domains) return
     let cancelled = false
     setSslCheck((c) => ({ ...c, checking: true }))
     api
-      .certCheck(form.hostId, primary)
+      .certCheck(form.hostId, domains)
       .then((r) => {
-        if (!cancelled) setSslCheck({ checking: false, installed: r.installed, expiresAt: r.expires_at })
+        if (!cancelled) {
+          setSslCheck({
+            checking: false,
+            installed: r.installed,
+            expiresAt: r.expires_at,
+            certName: r.cert_name || '',
+          })
+        }
       })
       .catch(() => {
-        if (!cancelled) setSslCheck({ checking: false, installed: false, expiresAt: '' })
+        if (!cancelled)
+          setSslCheck({ checking: false, installed: false, expiresAt: '', certName: '' })
       })
     return () => {
       cancelled = true
@@ -1041,11 +1060,19 @@ export function WebsiteApp({ onTitle }: AppProps) {
                   <span style={{ color: 'var(--text-dim)' }}>{t('检测证书状态…')}</span>
                 ) : sslCheck.installed ? (
                   <span style={{ color: '#34d399' }}>
-                    ✅ {t('证书已安装，到期时间 {0}', sslCheck.expiresAt || t('未知'))}
+                    ✅{' '}
+                    {t(
+                      '证书已安装（{0}），到期时间 {1}',
+                      sslCheck.certName || t('未知'),
+                      sslCheck.expiresAt || t('未知'),
+                    )}
                   </span>
                 ) : (
                   <span style={{ color: 'var(--red)' }}>
-                    ❌ {t('该域名证书未安装到 /etc/nginx/ssl/域名/，请先在「证书」页签签发或续签，否则部署时将降级为 HTTP。')}
+                    ❌{' '}
+                    {t(
+                      '未找到覆盖该域名的证书（/etc/nginx/ssl/<域名>/ 或上一级泛域名目录），请先在「证书」页签签发或续签，否则部署时将降级为 HTTP。',
+                    )}
                   </span>
                 )}
               </div>

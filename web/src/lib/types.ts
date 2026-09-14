@@ -269,6 +269,8 @@ export interface CertIssueInput {
 export interface CertCheckResult {
   installed: boolean
   expires_at: string
+  /** 实际命中的证书目录名（可能是泛域名，如 *.wyj.me） */
+  cert_name?: string
 }
 
 /** DNS 验证账户（Cloudflare API Token；明文不返回）。 */

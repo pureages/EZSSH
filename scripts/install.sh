@@ -13,7 +13,7 @@
 #
 # 可配置环境变量:
 #   EZSSH_LANG=en|zh        安装界面语言
-#   EZSSH_VERSION=v0.0.7-2  指定版本（默认 latest release）
+#   EZSSH_VERSION=v0.0.7-3  指定版本（默认 latest release）
 #   EZSSH_BIN=/path         安装目录（默认 root 时 /usr/local/bin，否则 ~/.local/bin）
 #   EZSSH_WEB=/path/web/dist  前端安装位置（默认 ~/.ezssh/web/dist）
 #

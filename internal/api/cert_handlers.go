@@ -237,21 +237,28 @@ func (s *Server) handleRenewCertificate(w http.ResponseWriter, r *http.Request) 
 	send(map[string]string{"ok": "true"})
 }
 
-// GET /api/certificates/check?host_id=&domain= 检测某域名证书是否已安装到稳定路径。
-// 返回 { installed, expires_at }，供建站表单勾选 SSL 时显示证书可用性。
+// GET /api/certificates/check?host_id=&domain= 检测该域名是否已有可用证书。
+// domain 支持逗号/空白分隔的多个域名；证书目录解析为「精确域名优先，其次上一级泛域名」，
+// 因此泛域名证书（*.wyj.me）可直接命中其下一级域名（www.wyj.me）。
+// 返回 { installed, expires_at, cert_name }，供建站表单勾选 SSL 时显示证书可用性。
 func (s *Server) handleCheckCertificate(w http.ResponseWriter, r *http.Request) {
 	hostID := strings.TrimSpace(r.URL.Query().Get("host_id"))
-	domain := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("domain")))
-	if hostID == "" || domain == "" {
+	domains := store.SplitDomainList(r.URL.Query().Get("domain"))
+	if hostID == "" || len(domains) == 0 {
 		writeErr(w, http.StatusBadRequest, "host_id and domain are required")
 		return
 	}
-	expires, err := s.cert.CertStatus(hostID, domain)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"installed": false, "expires_at": ""})
+	name, ok := s.cert.ResolveCertName(hostID, domains)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"installed": false, "expires_at": "", "cert_name": ""})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"installed": true, "expires_at": expires})
+	expires, err := s.cert.CertStatusByDir(hostID, name)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"installed": false, "expires_at": "", "cert_name": ""})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"installed": true, "expires_at": expires, "cert_name": name})
 }
 
 // POST /api/certificates/{id}/sync 从服务器重读证书到期时间，刷新记录。

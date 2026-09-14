@@ -514,7 +514,11 @@ export const api = {
   // ---- 网站管理：证书 ----
   certList: (hostId: string) =>
     request<Certificate[]>(`/api/certificates?host_id=${encodeURIComponent(hostId)}`),
-  /** 检测某域名证书是否已安装到 /etc/nginx/ssl/<domain>/（建站表单 SSL 可用性提示） */
+  /**
+   * 检测站点域名是否有可用证书（精确目录 /etc/nginx/ssl/<域名>/ 优先，
+   * 其次上一级泛域名目录 /etc/nginx/ssl/*.<上级域名>/）。
+   * domain 可传逗号/换行分隔的多个域名（建站表单 SSL 可用性提示）。
+   */
   certCheck: (hostId: string, domain: string) =>
     request<CertCheckResult>(
       `/api/certificates/check?host_id=${encodeURIComponent(hostId)}&domain=${encodeURIComponent(domain)}`,

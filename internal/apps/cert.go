@@ -198,7 +198,21 @@ func (m *CertManager) CertStatus(hostID, domains string) (string, error) {
 	if domain == "" {
 		return "", fmt.Errorf("域名不能为空")
 	}
-	pem := "/etc/nginx/ssl/" + domain + "/fullchain.pem"
+	return m.CertStatusByDir(hostID, domain)
+}
+
+// ResolveCertName 返回覆盖 domains、且已安装到 /etc/nginx/ssl/<name>/ 的证书目录名：
+// 精确匹配优先，其次上一级泛域名目录（如 www.wyj.me → *.wyj.me）。ok=false 表示无可用证书。
+func (m *CertManager) ResolveCertName(hostID string, domains []string) (string, bool) {
+	return resolveCertDirName(m, hostID, domains)
+}
+
+// CertStatusByDir 读取指定证书目录名（/etc/nginx/ssl/<name>/）下证书的到期时间。
+func (m *CertManager) CertStatusByDir(hostID, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("域名不能为空")
+	}
+	pem := "/etc/nginx/ssl/" + name + "/fullchain.pem"
 	out, err := m.exec(hostID, `openssl x509 -enddate -noout -in `+sshQuote(pem)+` 2>/dev/null`)
 	if err != nil || strings.TrimSpace(out) == "" {
 		return "", fmt.Errorf("证书文件不存在或无法读取")
