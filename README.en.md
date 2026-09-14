@@ -2,13 +2,11 @@
 
 > English | [简体中文](README.md)
 
-Version: v0.0.6-2
+Version: v0.0.7
 
 **A lightweight, clean, visualized, native SSH / SFTP-driven, self-hosted centralized web gateway for servers / VPS, powered by Go** — no Agent required on the managed servers, safe and controllable.
 
 For more details, see the [User Guide](doc/user-guide.en.md)
-
-The Android APK is available at: https://github.com/pureages/EZSSH-app
 
 ## Preview
 
@@ -27,7 +25,7 @@ The Android APK is available at: https://github.com/pureages/EZSSH-app
 3. **Docker management**: manage Docker visually and centrally.
 4. **Server monitoring**: monitor server status in real time, with a built-in task manager.
 5. **One-click commands**: run frequently used commands with one click, and manage sites centrally.
-6. **Pi-Agent management**: an AI agent based on [pi](https://github.com/earendil-works/pi) that lets AI manage your servers.
+6. **Server card view**: display servers as cards, with settable expiration dates and reminders.
 
 ## Quick Start
 
@@ -39,14 +37,6 @@ Supports Linux / macOS / Windows(msys).
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
-```
-
-**or**
-
-**CN mirror install script** (Gitee source, for users who can't reach GitHub from mainland China):
-
-```bash
-EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)
 ```
 
 ### 2. Docker Deployment

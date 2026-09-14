@@ -56,6 +56,8 @@ export interface ContainerSpec {
   restart: string
   configFile?: string
   configPath?: string
+  /** 直接粘贴的完整 docker run 命令（「自定义安装（docker run）」）；非空时后端优先使用 */
+  rawCommand?: string
 }
 
 export function emptySpec(): ContainerSpec {

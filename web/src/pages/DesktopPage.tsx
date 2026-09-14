@@ -19,6 +19,7 @@ import { useGeoStore } from '../lib/geoStore'
 import { useOsStore } from '../lib/osStore'
 import { useSecuritySettings } from '../lib/securitySettingsStore'
 import { onHostsChanged } from '../lib/hostsBus'
+import { fmtHostPriceShort } from '../lib/hostPrice'
 import { useT } from '../lib/i18n'
 import { topEscClose } from '../lib/escClose'
 import { OsLogo } from '../components/OsLogo'
@@ -39,6 +40,36 @@ function fmtBytes(b: number): string {
   if (b >= 1024 ** 2) return `${(b / 1024 ** 2).toFixed(1)}M`
   if (b >= 1024) return `${(b / 1024).toFixed(1)}K`
   return `${Math.round(b)}B`
+}
+
+/** 到期提醒级别：none=未设置 / ok=正常 / soon=临近（≤7 天）/ expired=已过期 */
+type ExpireLevel = 'none' | 'ok' | 'soon' | 'expired'
+
+interface ExpireInfo {
+  level: ExpireLevel
+  /** 距今天数（负数表示已过期）；未设置时为 NaN */
+  days: number
+}
+
+/** 解析 YYYY-MM-DD 为本地日期（0 点），非法返回 null */
+function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** 计算到期信息：临近（≤7 天）或过期用于高亮提醒 */
+function expireInfo(expireAt?: string): ExpireInfo {
+  if (!expireAt) return { level: 'none', days: NaN }
+  const d = parseYmd(expireAt)
+  if (!d) return { level: 'none', days: NaN }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((d.getTime() - today.getTime()) / 86400000)
+  if (days < 0) return { level: 'expired', days }
+  if (days <= 7) return { level: 'soon', days }
+  return { level: 'ok', days }
 }
 
 interface IconMenu {
@@ -73,13 +104,42 @@ function loadAutoSnap(): boolean {
   return localStorage.getItem('ezssh_icon_snap') === '1'
 }
 
+/** 桌面服务器展示模式：icon=图标（默认）/ card=卡片 */
+type HostView = 'icon' | 'card'
+
+function loadHostView(): HostView {
+  return localStorage.getItem('ezssh_host_view') === 'card' ? 'card' : 'icon'
+}
+
 /** 将坐标吸附到网格点 */
 function snapToGrid(v: number, origin: number, gap: number): number {
   return origin + Math.round((v - origin) / gap) * gap
 }
 
+/** 卡片模式：卡片默认位置（网格排列，可拖动到自定义位置） */
+const CARD_COL_GAP = 246
+const CARD_ROW_GAP = 152
+const CARD_ORIGIN = { x: 22, y: 20 }
+const CARD_PER_ROW = 4
+
+function defaultCardPos(index: number): { x: number; y: number } {
+  const col = index % CARD_PER_ROW
+  const row = Math.floor(index / CARD_PER_ROW)
+  return { x: CARD_ORIGIN.x + col * CARD_COL_GAP, y: CARD_ORIGIN.y + row * CARD_ROW_GAP }
+}
+
+function loadCardPositions(): Record<string, { x: number; y: number }> {
+  try {
+    return JSON.parse(localStorage.getItem('ezssh_card_pos') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+
+
 /** 应用中心卡片默认顺序 */
-const DEFAULT_APP_ORDER = ['servermap', 'addhost', 'settings', 'download', 'oneclick', 'website', 'pisshagent']
+const DEFAULT_APP_ORDER = ['addhost', 'settings', 'download', 'oneclick', 'website', 'cardmode']
 
 /** 从 localStorage 读取应用中心排序（非法/缺失时返回空数组） */
 function loadAppOrder(): string[] {
@@ -112,7 +172,9 @@ export function DesktopPage() {
   const [hostModalOpen, setHostModalOpen] = useState(false)
   const [editingHost, setEditingHost] = useState<Host | null>(null)
   const [iconPos, setIconPos] = useState<Record<string, { x: number; y: number }>>(loadIconPositions)
+  const [cardPos, setCardPos] = useState<Record<string, { x: number; y: number }>>(loadCardPositions)
   const [autoSnap, setAutoSnap] = useState<boolean>(loadAutoSnap)
+  const [hostView, setHostView] = useState<HostView>(loadHostView)
   // 框选 / 多选相关
   const selectedRef = useRef<Set<string>>(new Set())
   const [, forceSelected] = useState(0)
@@ -138,6 +200,8 @@ export function DesktopPage() {
     origs: Record<string, { x: number; y: number }>
     moved: boolean
   } | null>(null)
+  /** 当前拖拽的展示模式：决定写入哪套坐标（图标 / 卡片） */
+  const dragKindRef = useRef<HostView>('icon')
   const suppressDblClick = useRef(false)
 
   // ---- 应用中心拖拽排序 ----
@@ -181,6 +245,15 @@ export function DesktopPage() {
     }
   }, [iconPos])
 
+  // 持久化卡片位置
+  useEffect(() => {
+    try {
+      localStorage.setItem('ezssh_card_pos', JSON.stringify(cardPos))
+    } catch {
+      /* ignore */
+    }
+  }, [cardPos])
+
   // 持久化自动对齐开关
   useEffect(() => {
     try {
@@ -190,9 +263,19 @@ export function DesktopPage() {
     }
   }, [autoSnap])
 
+  // 持久化桌面服务器展示模式（图标 / 卡片）
+  useEffect(() => {
+    try {
+      localStorage.setItem('ezssh_host_view', hostView)
+    } catch {
+      /* ignore */
+    }
+  }, [hostView])
+
   // 拖拽处理器（支持多选拖动）
   const onIconPointerDown = (e: React.PointerEvent, h: Host, _index: number) => {
     if (e.button !== 0) return // 仅左键
+    dragKindRef.current = 'icon'
     // 判断本次拖拽涉及的图标集合：
     // - 当前图标已在多选集合中 → 拖动整个多选组
     // - 否则只拖动当前图标，并把多选集合替换为仅包含本图标
@@ -226,20 +309,40 @@ export function DesktopPage() {
     const dy = e.clientY - d.startY
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true
     if (d.moved) {
-      setIconPos((prev) => {
+      const isCard = dragKindRef.current === 'card'
+      const origin = isCard ? CARD_ORIGIN : ICON_ORIGIN
+      const gapX = isCard ? CARD_COL_GAP : ICON_COL_GAP
+      const gapY = isCard ? CARD_ROW_GAP : ICON_ROW_GAP
+      const apply = (prev: Record<string, { x: number; y: number }>) => {
         const next = { ...prev }
         for (const [id, o] of Object.entries(d.origs)) {
           let x = Math.max(0, o.x + dx)
           let y = Math.max(0, o.y + dy)
           if (autoSnap) {
-            x = snapToGrid(x, ICON_ORIGIN.x, ICON_COL_GAP)
-            y = snapToGrid(y, ICON_ORIGIN.y, ICON_ROW_GAP)
+            x = snapToGrid(x, origin.x, gapX)
+            y = snapToGrid(y, origin.y, gapY)
           }
           next[id] = { x, y }
         }
         return next
-      })
+      }
+      if (isCard) setCardPos(apply)
+      else setIconPos(apply)
     }
+  }
+
+  // 卡片模式：拖动卡片到自定义位置
+  const onCardPointerDown = (e: React.PointerEvent, h: Host, index: number) => {
+    if (e.button !== 0) return // 仅左键
+    dragKindRef.current = 'card'
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origs: { [h.id]: cardPos[h.id] ?? defaultCardPos(index) },
+      moved: false,
+    }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.stopPropagation()
   }
 
   const onIconPointerUp = () => {
@@ -260,13 +363,16 @@ export function DesktopPage() {
 
   /** 应用中心卡片（可拖拽排序） */
   const APP_CARDS: Record<string, { icon: string; label: string; run: () => void }> = {
-    servermap: { icon: '🌍', label: t('世界地图'), run: () => openApp('servermap', null) },
     addhost: { icon: '➕', label: t('添加服务器'), run: () => openAddHost() },
     settings: { icon: '⚙️', label: t('设置'), run: () => openApp('settings', null) },
     download: { icon: '⬇️', label: t('直链下载'), run: () => openApp('download', null) },
     oneclick: { icon: '⚡', label: t('一键命令'), run: () => openApp('oneclick', null) },
     website: { icon: '🌐', label: t('网站管理'), run: () => openApp('website', null) },
-    pisshagent: { icon: '🤖', label: t('pi-SSH-Agent'), run: () => openApp('pisshagent', null) },
+    cardmode: {
+      icon: '🗂️',
+      label: hostView === 'card' ? t('图标模式') : t('卡片模式'),
+      run: () => setHostView((v) => (v === 'icon' ? 'card' : 'icon')),
+    },
   }
 
   /** 打开编辑服务器表单 */
@@ -409,8 +515,9 @@ export function DesktopPage() {
   const onDesktopContextMenu = (e: React.MouseEvent) => {
     // 仅在桌面空白处（壁纸本身或其空白容器）触发，窗口/图标/任务栏/菜单不冒泡到此处
     const t = e.target as HTMLElement
-    if (t.closest('.window') || t.closest('.d-icon') || t.closest('.taskbar') ||
-        t.closest('.app-center') || t.closest('.ctx-menu') || t.closest('.host-picker')) {
+    if (t.closest('.window') || t.closest('.d-icon') || t.closest('.host-card') ||
+        t.closest('.taskbar') || t.closest('.app-center') || t.closest('.ctx-menu') ||
+        t.closest('.host-picker')) {
       return
     }
     e.preventDefault()
@@ -450,6 +557,7 @@ export function DesktopPage() {
       t.closest('.ctx-menu') ||
       t.closest('.app-center') ||
       t.closest('.d-icon') ||
+      t.closest('.host-card') ||
       t.closest('.host-picker') ||
       t.closest('.modal-mask')
     ) {
@@ -500,6 +608,76 @@ export function DesktopPage() {
     }
   }
 
+  /** 桌面可见主机（未隐藏） */
+  const visibleHosts = hosts.filter((h) => !h.hidden)
+
+  /** 价格展示文本（卡片角标）：如 「¥99/年」；未设置返回 '' */
+  const priceText = (h: Host): string => fmtHostPriceShort(h.price, h.currency, h.billing_cycle, t)
+
+  /** 图标/卡片悬浮提示文本 */
+  const hostTitleLines = (h: Host, dragHint = false): string => {
+    const distroName = distroNameMap[h.id]
+    const geo = geoByAddr[h.host]
+    const exp = expireInfo(h.expire_at)
+    const expText = h.expire_at
+      ? t(
+          '到期时间：{0}',
+          `${h.expire_at}${
+            exp.level === 'expired'
+              ? t('（已过期 {0} 天）', Math.abs(exp.days))
+              : exp.level === 'none'
+                ? ''
+                : t('（剩余 {0} 天）', exp.days)
+          }`,
+        )
+      : t('到期时间：未设置')
+    return [
+      t('{0}（{1}@{2}）', h.name, h.username, h.host),
+      distroName ? t('系统：{0}', distroName) : '',
+      geo ? t('位置：{0}', `${geo.country}${geo.region ? '·' + geo.region : ''}`) : '',
+      priceText(h) ? t('价格：{0}', priceText(h)) : '',
+      expText,
+      t(dragHint ? '左键拖动可调整位置，双击打开文件管理器，右键选择应用' : '双击打开文件管理器，右键选择应用'),
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  /** 微型监控行（图标与卡片共用） */
+  const renderMonitor = (h: Host) => {
+    const m = latest[h.id]
+    if (hideIconMonitor) return null
+    return (
+      <div className="mon" title={t('CPU | 内存 | 硬盘\n上传速率 | 下载速率\n总上传 | 总下载')}>
+        {m && !m.error ? (
+          <>
+            <div className="mon-line">
+              <span className="mon-cpu">{m.cpu.toFixed(1)}%</span>
+              <span className="mon-sep">|</span>
+              <span className="mon-mem">{m.memPct.toFixed(1)}%</span>
+              <span className="mon-sep">|</span>
+              <span className="mon-disk">{m.diskPct.toFixed(1)}%</span>
+            </div>
+            <div className="mon-line mon-line-center">
+              <span className="mon-tx">↑ {fmtRate(m.tx)}</span>
+              <span className="mon-sep">|</span>
+              <span className="mon-rx">↓ {fmtRate(m.rx)}</span>
+            </div>
+            <div className="mon-line mon-line-center">
+              <span className="mon-total-up">↑ {fmtBytes(m.txBytes)}</span>
+              <span className="mon-sep">|</span>
+              <span className="mon-total-down">↓ {fmtBytes(m.rxBytes)}</span>
+            </div>
+          </>
+        ) : !h.connected || m?.error ? (
+          <span className="mon-offline">{t('已离线')}</span>
+        ) : (
+          '…'
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       className="desktop"
@@ -536,21 +714,79 @@ export function DesktopPage() {
       onPointerUp={onDesktopPointerUp}
       onPointerCancel={onDesktopPointerUp}
     >
-      {/* 桌面图标区：主机快捷方式 + 微型监控（可左键拖拽定位） */}
-      <div className="desktop-icons">
-        {hosts
-          .filter((h) => !h.hidden)
-          .map((h, index) => {
-            const m = latest[h.id]
-            const pos = iconPos[h.id] ?? defaultIconPos(index)
-            const distroName = distroNameMap[h.id]
+      {/* 桌面服务器区：卡片模式（美观网格）或图标模式（可拖拽定位） */}
+      {hostView === 'card' ? (
+        <div className="desktop-cards" onPointerDown={(e) => e.stopPropagation()}>
+          {visibleHosts.map((h, index) => {
+            const pos = cardPos[h.id] ?? defaultCardPos(index)
             const geo = geoByAddr[h.host]
-            const titleLines = [
-              t('{0}（{1}@{2}）', h.name, h.username, h.host),
-              distroName ? t('系统：{0}', distroName) : '',
-              geo ? t('位置：{0}', `${geo.country}${geo.region ? '·' + geo.region : ''}`) : '',
-              t('左键拖动可调整位置，双击打开文件管理器，右键选择应用'),
-            ].filter(Boolean)
+            const exp = expireInfo(h.expire_at)
+            const price = priceText(h)
+            // 到期角标文案：如「余366天」/「已过期5天」
+            const daysText =
+              exp.level === 'none'
+                ? ''
+                : exp.level === 'expired'
+                  ? t('已过期{0}天', Math.abs(exp.days))
+                  : t('余{0}天', exp.days)
+            return (
+              <div
+                key={h.id}
+                className={`host-card${selectedRef.current.has(h.id) ? ' selected' : ''}${h.connected ? ' online' : ''}`}
+                style={{ left: pos.x, top: pos.y }}
+                title={hostTitleLines(h, true)}
+                onPointerDown={(e) => onCardPointerDown(e, h, index)}
+                onPointerMove={onIconPointerMove}
+                onPointerUp={onIconPointerUp}
+                onDoubleClick={() => openApp('files', h.id)}
+                onContextMenu={(e) => onIconContextMenu(e, h)}
+              >
+                <div className="hc-top">
+                  <span className="hc-logo">
+                    <span className={`dot ${h.connected ? 'online' : 'offline'}`} />
+                    <OsLogo distro={distroMap[h.id]} forceBase={flashActive} size={30} />
+                  </span>
+                  <div className="hc-title">
+                    <div className="hc-name">{t(h.name)}</div>
+                    <div className="hc-addr">
+                      {h.username}@{h.host}
+                      {h.port && h.port !== 22 ? `:${h.port}` : ''}
+                    </div>
+                  </div>
+                  <span className="hc-flag">
+                    <FlagBadge code={geo?.country_code} size={20} />
+                  </span>
+                </div>
+                {renderMonitor(h)}
+                {(price || daysText) && (
+                  <div className="hc-tags">
+                    {/* 价格角标：紫色文字 + 浅紫背景 */}
+                    {price && (
+                      <span className="hc-tag hc-tag-price" title={t('价格：{0}', price)}>
+                        {price}
+                      </span>
+                    )}
+                    {/* 到期角标：剩余天数为绿色，临近为橙色，已过期为红色 */}
+                    {daysText && (
+                      <span
+                        className={`hc-tag hc-tag-days hc-days-${exp.level}`}
+                        title={t('到期时间：{0}', h.expire_at || '')}
+                      >
+                        {daysText}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="desktop-icons">
+          {visibleHosts.map((h, index) => {
+            const pos = iconPos[h.id] ?? defaultIconPos(index)
+            const geo = geoByAddr[h.host]
+            const exp = expireInfo(h.expire_at)
             return (
               <div
                 key={h.id}
@@ -560,7 +796,7 @@ export function DesktopPage() {
                   if (el) iconRefs.current.set(h.id, el)
                   else iconRefs.current.delete(h.id)
                 }}
-                title={titleLines.join('\n')}
+                title={hostTitleLines(h, true)}
                 onPointerDown={(e) => onIconPointerDown(e, h, index)}
                 onPointerMove={onIconPointerMove}
                 onPointerUp={onIconPointerUp}
@@ -579,42 +815,17 @@ export function DesktopPage() {
                   </span>
                 </span>
                 <span className="lbl">{t(h.name)}</span>
-                {!hideIconMonitor && (
-                  <div
-                    className="mon"
-                    title={t('CPU | 内存 | 硬盘\n上传速率 | 下载速率\n总上传 | 总下载')}
-                  >
-                    {m && !m.error ? (
-                      <>
-                        <div className="mon-line">
-                          <span className="mon-cpu">{m.cpu.toFixed(1)}%</span>
-                          <span className="mon-sep">|</span>
-                          <span className="mon-mem">{m.memPct.toFixed(1)}%</span>
-                          <span className="mon-sep">|</span>
-                          <span className="mon-disk">{m.diskPct.toFixed(1)}%</span>
-                        </div>
-                        <div className="mon-line mon-line-center">
-                          <span className="mon-tx">↑ {fmtRate(m.tx)}</span>
-                          <span className="mon-sep">|</span>
-                          <span className="mon-rx">↓ {fmtRate(m.rx)}</span>
-                        </div>
-                        <div className="mon-line mon-line-center">
-                          <span className="mon-total-up">↑ {fmtBytes(m.txBytes)}</span>
-                          <span className="mon-sep">|</span>
-                          <span className="mon-total-down">↓ {fmtBytes(m.rxBytes)}</span>
-                        </div>
-                      </>
-                    ) : !h.connected || m?.error ? (
-                      <span className="mon-offline">{t('已离线')}</span>
-                    ) : (
-                      '…'
-                    )}
-                  </div>
+                {renderMonitor(h)}
+                {(exp.level === 'soon' || exp.level === 'expired') && (
+                  <span className={`exp-badge ${exp.level}`} title={t('到期时间：{0}', h.expire_at || '')}>
+                    {exp.level === 'expired' ? t('已过期') : t('{0}天', exp.days)}
+                  </span>
                 )}
               </div>
             )
           })}
-      </div>
+        </div>
+      )}
 
       {/* 窗口层 */}
       {windows.map((w) => (
@@ -738,6 +949,12 @@ export function DesktopPage() {
             onClick={() => setAutoSnap((v) => !v)}
           >
             {autoSnap ? '✅' : '⬜'} {t('自动对齐')}
+          </div>
+          <div
+            className="ctx-menu-item"
+            onClick={() => setHostView((v) => (v === 'icon' ? 'card' : 'icon'))}
+          >
+            {hostView === 'card' ? '✅' : '⬜'} {t('卡片模式')}
           </div>
           <div className="ctx-menu-sep" />
           <div className="ctx-menu-item" onClick={() => { setDesktopMenu(null); void onLogout() }}>

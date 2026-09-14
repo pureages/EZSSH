@@ -5,27 +5,33 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"ezssh/internal/store"
 )
 
 type hostDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	Username    string `json:"username"`
-	AuthType    string `json:"auth_type"`
-	GroupName   string `json:"group_name"`
-	Remark      string `json:"remark"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	Connected   bool   `json:"connected"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	Hidden      bool   `json:"hidden"`
-	Builtin     bool   `json:"builtin"`
-	Platform    string `json:"platform,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	Username     string `json:"username"`
+	AuthType     string `json:"auth_type"`
+	GroupName    string `json:"group_name"`
+	Remark       string `json:"remark"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	Connected    bool   `json:"connected"`
+	Fingerprint  string `json:"fingerprint,omitempty"`
+	Hidden       bool   `json:"hidden"`
+	Builtin      bool   `json:"builtin"`
+	Platform     string `json:"platform,omitempty"`
+	ExpireAt     string `json:"expire_at"`
+	Price        string `json:"price"`
+	Currency     string `json:"currency"`
+	BillingCycle string `json:"billing_cycle"`
 }
 
 func toDTO(h *store.Host, connected bool, fp string) hostDTO {
@@ -34,7 +40,8 @@ func toDTO(h *store.Host, connected bool, fp string) hostDTO {
 		AuthType: h.AuthType, GroupName: h.GroupName, Remark: h.Remark,
 		CreatedAt: h.CreatedAt, UpdatedAt: h.UpdatedAt,
 		Connected: connected, Fingerprint: fp, Hidden: h.Hidden, Builtin: h.Builtin,
-		Platform: h.Platform,
+		Platform: h.Platform, ExpireAt: h.ExpireAt,
+		Price: h.Price, Currency: h.Currency, BillingCycle: h.BillingCycle,
 	}
 }
 
@@ -62,16 +69,20 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 }
 
 type hostReq struct {
-	Name       string `json:"name"`
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	Username   string `json:"username"`
-	AuthType   string `json:"auth_type"`
-	Password   string `json:"password,omitempty"`
-	PrivateKey string `json:"private_key,omitempty"`
-	GroupName  string `json:"group_name"`
-	Remark     string `json:"remark"`
-	Platform   string `json:"platform,omitempty"`
+	Name         string `json:"name"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	Username     string `json:"username"`
+	AuthType     string `json:"auth_type"`
+	Password     string `json:"password,omitempty"`
+	PrivateKey   string `json:"private_key,omitempty"`
+	GroupName    string `json:"group_name"`
+	Remark       string `json:"remark"`
+	Platform     string `json:"platform,omitempty"`
+	ExpireAt     string `json:"expire_at,omitempty"`
+	Price        string `json:"price,omitempty"`
+	Currency     string `json:"currency,omitempty"`
+	BillingCycle string `json:"billing_cycle,omitempty"`
 }
 
 // validate 校验公共字段。requireCredential=true 时强制要求提供凭据（创建场景），
@@ -101,8 +112,40 @@ func (r *hostReq) validate(requireCredential bool) (string, bool) {
 	default:
 		return "platform must be empty, linux or windows", false
 	}
+	// expire_at：''（未设置）或 YYYY-MM-DD（仅保留日期部分，忽略时间）
+	r.ExpireAt = strings.TrimSpace(r.ExpireAt)
+	if r.ExpireAt != "" {
+		parsed, err := time.Parse("2006-01-02", r.ExpireAt)
+		if err != nil {
+			return "expire_at must be empty or YYYY-MM-DD", false
+		}
+		r.ExpireAt = parsed.Format("2006-01-02")
+	}
+	// 价格：''（未设置）或非负数字；金额为空时忽略币种与周期
+	r.Price = strings.TrimSpace(r.Price)
+	if r.Price != "" {
+		if !priceRe.MatchString(r.Price) {
+			return "price must be a non-negative number", false
+		}
+	} else {
+		r.Currency = ""
+		r.BillingCycle = ""
+	}
+	switch r.Currency {
+	case "", "CNY", "USD", "EUR":
+	default:
+		return "currency must be empty, CNY, USD or EUR", false
+	}
+	switch r.BillingCycle {
+	case "", "month", "year", "3year", "once":
+	default:
+		return "billing_cycle must be empty, month, year, 3year or once", false
+	}
 	return "", true
 }
+
+// priceRe 价格金额：非负数字，可带小数位。
+var priceRe = regexp.MustCompile(`^\d+(\.\d+)?$`)
 
 // credentialPlain 返回待加密的明文凭据。
 func (r *hostReq) credentialPlain() string {
@@ -142,7 +185,8 @@ func (s *Server) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 		Port: req.Port, Username: strings.TrimSpace(req.Username),
 		AuthType: req.AuthType, Credential: enc,
 		GroupName: strings.TrimSpace(req.GroupName), Remark: strings.TrimSpace(req.Remark),
-		Platform: req.Platform,
+		Platform: req.Platform, ExpireAt: req.ExpireAt,
+		Price: req.Price, Currency: req.Currency, BillingCycle: req.BillingCycle,
 	}
 	if err := s.st.CreateHost(h); err != nil {
 		writeErr(w, http.StatusInternalServerError, "create host failed")
@@ -179,9 +223,10 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	h := &store.Host{
 		ID: id, Name: strings.TrimSpace(req.Name), Host: strings.TrimSpace(req.Host),
 		Port: req.Port, Username: strings.TrimSpace(req.Username),
-		AuthType: req.AuthType,
+		AuthType:  req.AuthType,
 		GroupName: strings.TrimSpace(req.GroupName), Remark: strings.TrimSpace(req.Remark),
-		Platform: req.Platform,
+		Platform: req.Platform, ExpireAt: req.ExpireAt,
+		Price: req.Price, Currency: req.Currency, BillingCycle: req.BillingCycle,
 	}
 	if err := s.st.UpdateHost(h); err != nil {
 		writeErr(w, http.StatusInternalServerError, "update host failed")

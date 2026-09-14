@@ -257,6 +257,11 @@ export function DockerApp({ hostId, platform }: AppProps) {
   const [custom, setCustom] = useState<ContainerSpec>(emptySpec())
   const [customMsg, setCustomMsg] = useState('')
 
+  // 自定义安装（docker run）：直接粘贴一键安装命令
+  const [customRunOpen, setCustomRunOpen] = useState(false)
+  const [runCmd, setRunCmd] = useState('')
+  const [runMsg, setRunMsg] = useState('')
+
   // 服务器 IP（用于端口点击跳转）
   const [serverHost, setServerHost] = useState('')
 
@@ -497,6 +502,27 @@ export function DockerApp({ hostId, platform }: AppProps) {
     }
   }
 
+  // 自定义安装（docker run）：直接执行用户粘贴的一键 docker run 命令
+  const installDockerRun = async () => {
+    const cmd = runCmd.trim()
+    if (!cmd) {
+      setRunMsg(t('请粘贴 docker run 命令'))
+      return
+    }
+    if (!/^(?:sudo\s+)?docker\s+run(?:\s|$)/.test(cmd)) {
+      setRunMsg(t('命令必须以 docker run 开头'))
+      return
+    }
+    setRunMsg('')
+    setCustomRunOpen(false)
+    const spec: ContainerSpec = { ...emptySpec(), rawCommand: cmd }
+    const r = await runInstall(t('正在安装容器…'), spec)
+    if (r.ok) {
+      setTab('containers')
+      void refresh()
+    }
+  }
+
   // 打开已安装应用的详情（容器配置信息 + 安装时的参数详情）
   const openInstalledApp = (app: MarketApp) => {
     const c = containers.find((x) =>
@@ -599,7 +625,10 @@ export function DockerApp({ hostId, platform }: AppProps) {
         </button>
         <div style={{ flex: 1 }} />
         <button className="btn btn-sm btn-ghost" onClick={() => setCustomOpen(true)}>
-          {t('自定义安装')}
+          {t('自定义安装（设置配置）')}
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setCustomRunOpen(true)}>
+          {t('自定义安装（docker run）')}
         </button>
         <button className="btn btn-sm btn-ghost" onClick={refresh} disabled={!installed}>
           {t('刷新')}
@@ -1136,7 +1165,7 @@ export function DockerApp({ hostId, platform }: AppProps) {
       {customOpen && (
         <div className="modal-mask" style={{ zIndex: 1000 }} onClick={() => setCustomOpen(false)}>
           <div className="modal" style={{ maxHeight: '85%', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <h3>{t('自定义安装容器')}</h3>
+            <h3>{t('自定义安装容器（设置配置）')}</h3>
 
             <div className="field">
               <label>{t('容器名称（可选）')}</label>
@@ -1239,6 +1268,50 @@ export function DockerApp({ hostId, platform }: AppProps) {
                 {t('取消')}
               </button>
               <button className="btn" onClick={installCustom} disabled={!installed}>
+                {t('安装')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 自定义安装（docker run）弹窗：直接粘贴一键安装命令 */}
+      {customRunOpen && (
+        <div className="modal-mask" style={{ zIndex: 1000 }} onClick={() => setCustomRunOpen(false)}>
+          <div className="modal" style={{ maxHeight: '85%', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <h3>{t('自定义安装容器（docker run）')}</h3>
+
+            <div className="field">
+              <label>{t('docker run 命令')}</label>
+              <textarea
+                value={runCmd}
+                onChange={(e) => setRunCmd(e.target.value)}
+                placeholder="docker run -d --name myapp -p 8080:80 -v /data:/data nginx:latest"
+                rows={8}
+                spellCheck={false}
+                autoFocus
+                style={{ fontFamily: 'Consolas, Menlo, monospace', fontSize: 12 }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-1)', marginTop: 6, lineHeight: 1.6 }}>
+                {t('粘贴完整的一键安装命令（必须以 docker run 开头，建议包含 -d 后台运行）；仅支持单条命令，多行写法可用反斜杠续行。')}
+              </div>
+            </div>
+
+            {runMsg && (
+              <div style={{ margin: '8px 0', color: 'var(--red)', wordBreak: 'break-all' }}>{runMsg}</div>
+            )}
+
+            {!installed && (
+              <div style={{ marginBottom: 10, color: 'var(--yellow)', fontSize: 12 }}>
+                {t('目标服务器尚未安装 Docker，请先返回容器页一键安装 Docker。')}
+              </div>
+            )}
+
+            <div className="footer">
+              <button className="btn btn-ghost" onClick={() => setCustomRunOpen(false)}>
+                {t('取消')}
+              </button>
+              <button className="btn" onClick={installDockerRun} disabled={!installed}>
                 {t('安装')}
               </button>
             </div>

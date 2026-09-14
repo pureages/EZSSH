@@ -12,11 +12,9 @@ import { TaskManagerApp } from './apps/TaskManagerApp'
 import { DockerApp } from './apps/DockerApp'
 import { FirewallApp } from './apps/FirewallApp'
 import { SettingsApp } from './apps/SettingsApp'
-import { ServerMapApp } from './apps/ServerMapApp'
 import { DownloadApp } from './apps/DownloadApp'
 import { OneClickCmdApp } from './apps/OneClickCmdApp'
 import { WebsiteApp } from './apps/WebsiteApp'
-import { PiSSHAgentApp } from './apps/PiSSHAgentApp'
 import { tt, useI18n } from './lib/i18n'
 import { GlobalContextMenu } from './components/GlobalContextMenu'
 
@@ -75,14 +73,6 @@ registerApp({
   component: SettingsApp,
 })
 registerApp({
-  id: 'servermap',
-  name: '世界地图',
-  icon: '🌍',
-  defaultSize: { width: 1240, height: 760 },
-  singleton: true,
-  component: ServerMapApp,
-})
-registerApp({
   id: 'download',
   name: '直链下载',
   icon: '⬇️',
@@ -105,14 +95,6 @@ registerApp({
   defaultSize: { width: 1160, height: 700 },
   singleton: true,
   component: WebsiteApp,
-})
-registerApp({
-  id: 'pisshagent',
-  name: 'pi-SSH-Agent',
-  icon: '🤖',
-  defaultSize: { width: 900, height: 560 },
-  singleton: true,
-  component: PiSSHAgentApp,
 })
 
 function App() {

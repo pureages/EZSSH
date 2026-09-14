@@ -1,6 +1,6 @@
 # EZSSH User Guide
 
-A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.6-2 · Updated 2026-08-09
+A clean, efficient, visualized self-hosted centralized SSH web gateway · Version v0.0.7 · Updated 2026-09-14
 
 ## Table of Contents
 
@@ -17,7 +17,6 @@ A clean, efficient, visualized self-hosted centralized SSH web gateway · Versio
   - [6.1 Environment Variables](#s6-1)
   - [6.2 Data Directory & Backup](#s6-2)
   - [6.3 Public Deployment Recommendations](#s6-3)
-- [7. pi-SSH-Agent (AI Server Management)](#s7)
 
 <a id="s1"></a>
 ## 1. Introduction
@@ -41,12 +40,6 @@ Supports Linux / macOS / Windows(msys).
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
-```
-
-**CN mirror install script** (for users who can't reach GitHub from mainland China):
-
-```bash
-EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)
 ```
 
 <a id="s2-2"></a>
@@ -81,7 +74,9 @@ After login you enter a Windows-like web desktop to manage all servers with wind
 
 - Apps open as **windows** that can be dragged, resized, minimized / maximized / closed via the top-right buttons; **press ESC to close the active window**.
 - **Server icons**: double-click to open the file manager; right-click for a context menu (Terminal / Files / Task Manager / Docker / Firewall / Downloads / Edit); drag with the left button to reposition. Icons show the system logo, country flag and a three-line mini monitor (CPU|Memory|Disk, upload/download rates, total traffic).
-- **Taskbar & App Center**: the bottom taskbar manages open windows; the 🪟 button opens the App Center (World Map, Add Server, Settings, Downloads, Quick Commands, Websites, pi-SSH-Agent).
+- **Server card view**: choose "Card mode" from the desktop's right-click menu to show servers as cards with online status, system logo, country flag, mini monitor, **price** and the **expiration date**; cards can be dragged to custom positions. The expiration date and price (amount + currency + billing cycle) can be set when adding/editing a server; the date is highlighted when expiring soon (within 7 days) or already expired.
+- **File upload**: the file manager supports dragging local files directly into the window to upload (drop onto a folder row to upload into that folder), and the "Upload" button supports selecting multiple files; folders in the "Quick Access" sidebar can be dragged up/down to reorder.
+- **Taskbar & App Center**: the bottom taskbar manages open windows; the 🪟 button opens the App Center (Add Server, Settings, Downloads, Quick Commands, Websites, Card mode).
 - **Background progress**: long-running operations (Nginx install, site deployment, certificate issuance, file copy/paste, etc.) can be minimized to run in the background — the taskbar badge auto-collapses on success, and the window restores automatically to show an error on failure.
 
 <a id="s4"></a>
@@ -166,34 +161,6 @@ On the Windows server to be added, run the following commands in PowerShell as A
 ### 6.3 Public Deployment Recommendations
 
 > **Warning**: the default listen address is `0.0.0.0`, which exposes the gateway to all network interfaces. For public deployments it is strongly recommended to place EZSSH behind Caddy / Nginx and enable HTTPS, and do not expose raw HTTP to the public internet. Set `EZSSH_LISTEN=127.0.0.1` for local-only access.
-
-<a id="s7"></a>
-## 7. pi-SSH-Agent (AI Server Management)
-
-pi-SSH-Agent is an AI assistant app based on [pi](https://github.com/earendil-works/pi). It opens a terminal of the gateway host and automatically starts `pissh` (a pi preloaded with the EZSSH SSH extension), letting you manage the servers already added to EZSSH in natural language. Credentials are kept in the EZSSH vault; the AI executes commands by host name through a restricted agent API — passwords are never handed to the AI.
-
-**Usage**:
-
-1. **Prerequisite**: the gateway host (Local/Gateway) must have its SSH credentials configured.
-2. Open App Center → pi-SSH-Agent:
-   - If `pissh` is not installed on the gateway, a one-line install command (with an embedded access token) is shown — run it in the gateway server's terminal;
-   - After installation, reopen the app to enter the gateway terminal with `pissh` auto-started, then chat with the AI.
-3. On first use, configure the model inside `pissh` (`/login` or provider API key).
-
-**Example**:
-
-```
-Show me the hardware info of home99.
-```
-
-The AI first calls `list_hosts` to confirm the host, then uses `ssh_exec` to run the command on `home99` and return the output.
-
-**Built-in tools**:
-
-- `list_hosts`: list all servers saved in the EZSSH gateway (name, address, port, user, platform).
-- `ssh_exec`: run a shell command on the specified host (name or ID) and return the output.
-
-**Uninstall**: `pissh` is removed together with EZSSH (uninstalling EZSSH also deletes `/usr/local/bin/pissh`, the pi extension and its config).
 
 ---
 

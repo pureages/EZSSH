@@ -546,6 +546,171 @@ body,
   letter-spacing: 0.5px;
 }
 
+/* ---- 服务器卡片模式（卡片可自由拖动定位） ---- */
+.desktop-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.host-card {
+  position: absolute;
+  width: 226px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(var(--rgb-panel), 0.55);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.host-card:active {
+  cursor: grabbing;
+}
+
+.host-card:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  border-color: rgba(var(--rgb-primary), 0.5);
+}
+
+.host-card.selected {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 1px var(--primary-light), 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.host-card .hc-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.host-card .hc-logo {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+}
+
+.host-card .hc-logo .dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  margin: 0;
+}
+
+.host-card .hc-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.host-card .hc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-card .hc-addr {
+  margin-top: 2px;
+  font-size: 11px;
+  font-family: Consolas, Menlo, monospace;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-card .hc-flag {
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+/* 卡片内迷你监控：居中排布 */
+.host-card .mon {
+  margin-top: 2px;
+  align-items: center;
+}
+
+/* 卡片底部角标：价格（紫色）+ 剩余天数（绿色） */
+.host-card .hc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--rgb-line), 0.14);
+}
+
+.host-card .hc-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  font-family: Consolas, Menlo, monospace;
+}
+
+/* 价格：紫色文字 + 浅紫背景 */
+.host-card .hc-tag-price {
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.18);
+}
+
+/* 剩余天数：绿色文字 + 浅绿背景 */
+.host-card .hc-tag-days {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.16);
+}
+
+/* 到期高亮：临近（≤7 天）橙色，已过期红色 */
+.host-card .hc-tag-days.hc-days-soon {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.host-card .hc-tag-days.hc-days-expired {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+/* 图标模式的到期角标（临近/已过期） */
+.d-icon .exp-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff;
+  pointer-events: none;
+}
+
+.d-icon .exp-badge.soon {
+  background: #d97706;
+}
+
+.d-icon .exp-badge.expired {
+  background: #dc2626;
+}
+
 /* 图标右键菜单 */
 .ctx-menu {
   position: fixed;
@@ -621,6 +786,60 @@ body,
 
 .fm-row.sel:hover {
   background: rgba(var(--rgb-primary), 0.3);
+}
+
+/* 拖拽上传：作为目标的文件夹行高亮 */
+.fm-row.drop-target {
+  background: rgba(var(--rgb-primary), 0.28);
+  outline: 1px dashed var(--primary-light);
+  outline-offset: -2px;
+}
+
+/* 拖拽上传提示层 */
+.fm-drop-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--rgb-appbg), 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+
+.fm-drop-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 40px;
+  border-radius: 16px;
+  border: 2px dashed var(--primary-light);
+  background: rgba(var(--rgb-panel), 0.9);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.fm-drop-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.fm-drop-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+
+.fm-drop-sub {
+  font-size: 12px;
+  color: var(--text-1);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 窗口 */
@@ -1830,6 +2049,15 @@ button,
 }
 .qa-item.active {
   background: rgba(var(--rgb-primary), 0.16);
+}
+/* 快速访问拖拽排序 */
+.qa-item.dragging {
+  opacity: 0.45;
+}
+.qa-item.drag-over {
+  background: rgba(var(--rgb-primary), 0.22);
+  outline: 1px dashed var(--primary-light);
+  outline-offset: -2px;
 }
 
 /* 地址栏面包屑（Windows 资源管理器风格）：每段目录都是一个可点击按钮 */

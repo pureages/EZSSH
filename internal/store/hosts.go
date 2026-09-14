@@ -10,21 +10,25 @@ const SettingBuiltinDeleted = "builtin_host_deleted"
 
 // Host 对应 hosts 表。Credential 为 vault 加密后的密文，永不返回前端。
 type Host struct {
-	ID          string
-	Name        string
-	Host        string
-	Port        int
-	Username    string
-	AuthType    string // 'password' | 'privatekey'
-	Credential  []byte
-	GroupName   string
-	Remark      string
-	Fingerprint string // TOFU 主机密钥指纹
-	Hidden      bool   // 桌面图标被隐藏
-	Builtin     bool   // 内置主机（网关本机，默认播种、可删除）
-	Platform    string // ''（未知/自动检测）| 'linux' | 'windows'
-	CreatedAt   string
-	UpdatedAt   string
+	ID           string
+	Name         string
+	Host         string
+	Port         int
+	Username     string
+	AuthType     string // 'password' | 'privatekey'
+	Credential   []byte
+	GroupName    string
+	Remark       string
+	Fingerprint  string // TOFU 主机密钥指纹
+	Hidden       bool   // 桌面图标被隐藏
+	Builtin      bool   // 内置主机（网关本机，默认播种、可删除）
+	Platform     string // ''（未知/自动检测）| 'linux' | 'windows'
+	ExpireAt     string // 服务器到期日期（YYYY-MM-DD），''=未设置
+	Price        string // 价格金额（''=未设置）
+	Currency     string // 币种：''|CNY|USD|EUR
+	BillingCycle string // 计费周期：''|month|year|3year|once
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
@@ -33,6 +37,7 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 		&h.ID, &h.Name, &h.Host, &h.Port, &h.Username, &h.AuthType,
 		&h.Credential, &h.GroupName, &h.Remark, &h.Fingerprint,
 		&h.Hidden, &h.Builtin, &h.CreatedAt, &h.UpdatedAt, &h.Platform,
+		&h.ExpireAt, &h.Price, &h.Currency, &h.BillingCycle,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -43,13 +48,14 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	return h, nil
 }
 
-const hostCols = `id, name, host, port, username, auth_type, credential, group_name, remark, fingerprint, hidden, builtin, created_at, updated_at, platform`
+const hostCols = `id, name, host, port, username, auth_type, credential, group_name, remark, fingerprint, hidden, builtin, created_at, updated_at, platform, expire_at, price, currency, billing_cycle`
 
 func (s *Store) CreateHost(h *Host) error {
 	_, err := s.db.Exec(
-		`INSERT INTO hosts (`+hostCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?)`,
+		`INSERT INTO hosts (`+hostCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?,?,?,?)`,
 		h.ID, h.Name, h.Host, h.Port, h.Username, h.AuthType,
 		h.Credential, h.GroupName, h.Remark, h.Fingerprint, h.Hidden, h.Builtin, h.Platform,
+		h.ExpireAt, h.Price, h.Currency, h.BillingCycle,
 	)
 	return err
 }
@@ -80,8 +86,9 @@ func (s *Store) ListHosts() ([]*Host, error) {
 // UpdateHost 更新除凭据外的字段；新凭据需单独调用 UpdateHostCredential。
 func (s *Store) UpdateHost(h *Host) error {
 	_, err := s.db.Exec(
-		`UPDATE hosts SET name=?, host=?, port=?, username=?, auth_type=?, group_name=?, remark=?, platform=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		h.Name, h.Host, h.Port, h.Username, h.AuthType, h.GroupName, h.Remark, h.Platform, h.ID,
+		`UPDATE hosts SET name=?, host=?, port=?, username=?, auth_type=?, group_name=?, remark=?, platform=?, expire_at=?, price=?, currency=?, billing_cycle=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		h.Name, h.Host, h.Port, h.Username, h.AuthType, h.GroupName, h.Remark, h.Platform, h.ExpireAt,
+		h.Price, h.Currency, h.BillingCycle, h.ID,
 	)
 	return err
 }
@@ -144,9 +151,10 @@ func (s *Store) EnsureBuiltinHost() error {
 		AuthType: "password", Credential: []byte{}, Builtin: true,
 	}
 	_, err := s.db.Exec(
-		`INSERT OR IGNORE INTO hosts (`+hostCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?)`,
+		`INSERT OR IGNORE INTO hosts (`+hostCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?,?,?,?)`,
 		h.ID, h.Name, h.Host, h.Port, h.Username, h.AuthType,
 		h.Credential, h.GroupName, h.Remark, h.Fingerprint, h.Hidden, h.Builtin, h.Platform,
+		h.ExpireAt, h.Price, h.Currency, h.BillingCycle,
 	)
 	return err
 }

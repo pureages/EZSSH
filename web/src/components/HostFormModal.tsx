@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { useT, transErr } from '../lib/i18n'
+import { BILLING_CYCLE_OPTIONS, CURRENCY_OPTIONS } from '../lib/hostPrice'
 import { useEscClose } from '../lib/escClose'
 import type { Host, HostInput } from '../lib/types'
 
@@ -15,6 +16,10 @@ interface HostForm {
   group_name: string
   remark: string
   platform: '' | 'linux' | 'windows'
+  expire_at: string
+  price: string
+  currency: string
+  billing_cycle: string
 }
 
 const emptyForm: HostForm = {
@@ -28,6 +33,10 @@ const emptyForm: HostForm = {
   group_name: '',
   remark: '',
   platform: '',
+  expire_at: '',
+  price: '',
+  currency: 'CNY',
+  billing_cycle: 'month',
 }
 
 interface Props {
@@ -73,6 +82,10 @@ export function HostFormModal({ open, editing, onClose, onSaved }: Props) {
         group_name: editing.group_name,
         remark: editing.remark,
         platform: editing.platform === 'linux' || editing.platform === 'windows' ? editing.platform : '',
+        expire_at: editing.expire_at || '',
+        price: editing.price || '',
+        currency: editing.currency || 'CNY',
+        billing_cycle: editing.billing_cycle || 'month',
       })
     } else {
       setForm(emptyForm)
@@ -92,6 +105,10 @@ export function HostFormModal({ open, editing, onClose, onSaved }: Props) {
     group_name: form.group_name.trim(),
     remark: form.remark.trim(),
     platform: form.platform || undefined,
+    expire_at: form.expire_at || '',
+    price: form.price.trim(),
+    currency: form.currency,
+    billing_cycle: form.billing_cycle,
   })
 
   const testConnect = async () => {
@@ -248,6 +265,58 @@ export function HostFormModal({ open, editing, onClose, onSaved }: Props) {
             value={form.remark}
             onChange={(e) => setForm({ ...form, remark: e.target.value })}
           />
+        </div>
+
+        <div className="field">
+          <label>{t('到期时间（可选）')}</label>
+          <input
+            type="date"
+            value={form.expire_at}
+            onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
+            title={t('设置服务器到期日期，桌面卡片会显示剩余天数并在临近到期时提醒')}
+          />
+        </div>
+
+        <div className="field">
+          <label>{t('价格（可选）')}</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select
+              value={form.currency}
+              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+              style={{ width: 104, flexShrink: 0 }}
+              title={t('价格币种')}
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.symbol} {t(c.key)}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
+              placeholder={t('如：99.00')}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <select
+              value={form.billing_cycle}
+              onChange={(e) => setForm({ ...form, billing_cycle: e.target.value })}
+              style={{ width: 116, flexShrink: 0 }}
+              title={t('计费周期')}
+            >
+              {BILLING_CYCLE_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {t(c.key)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-1)', marginTop: 4 }}>
+            {t('留空表示不显示价格；桌面卡片会显示「币种 + 金额 / 计费周期」。')}
+          </div>
         </div>
 
         <div className="error-text">{msg}</div>

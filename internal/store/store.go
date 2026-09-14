@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS hosts (
   fingerprint TEXT NOT NULL DEFAULT '',  -- TOFU 主机密钥指纹 SHA256
   hidden      INTEGER NOT NULL DEFAULT 0, -- 1=桌面图标被隐藏
   builtin     INTEGER NOT NULL DEFAULT 0, -- 1=内置主机（网关本机，默认播种、可删除）
+  expire_at   TEXT NOT NULL DEFAULT '',   -- 服务器到期日期（YYYY-MM-DD），''=未设置
+  price         TEXT NOT NULL DEFAULT '', -- 价格金额（保留用户输入，''=未设置）
+  currency      TEXT NOT NULL DEFAULT '', -- 币种：''|CNY|USD|EUR
+  billing_cycle TEXT NOT NULL DEFAULT '', -- 计费周期：''|month|year|3year|once
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -172,6 +176,27 @@ CREATE TABLE IF NOT EXISTS dns_accounts (
 		if !strings.Contains(err.Error(), "duplicate column") &&
 			!strings.Contains(err.Error(), "already exists") {
 			return err
+		}
+	}
+	// 兼容旧库：服务器到期日期（YYYY-MM-DD，'' = 未设置）
+	_, err = s.db.Exec(`ALTER TABLE hosts ADD COLUMN expire_at TEXT NOT NULL DEFAULT ''`)
+	if err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") &&
+			!strings.Contains(err.Error(), "already exists") {
+			return err
+		}
+	}
+	// 兼容旧库：服务器价格（金额 / 币种 / 计费周期）
+	for _, ddl := range []string{
+		`ALTER TABLE hosts ADD COLUMN price TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hosts ADD COLUMN currency TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hosts ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err = s.db.Exec(ddl); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") &&
+				!strings.Contains(err.Error(), "already exists") {
+				return err
+			}
 		}
 	}
 	// 兼容旧库：为一键命令添加「绑定服务器」列

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useT, transErr } from '../lib/i18n'
+import { fmtHostPrice } from '../lib/hostPrice'
 import { HostFormModal } from '../components/HostFormModal'
 import type { Host } from '../lib/types'
 
@@ -97,6 +98,8 @@ export function HostsPage() {
                 <th>{t('用户')}</th>
                 <th>{t('认证')}</th>
                 <th>{t('分组')}</th>
+                <th>{t('到期时间')}</th>
+                <th>{t('价格')}</th>
                 <th>{t('备注')}</th>
                 <th>{t('操作')}</th>
               </tr>
@@ -114,6 +117,8 @@ export function HostsPage() {
                   <td>{h.username}</td>
                   <td>{h.auth_type === 'password' ? t('密码') : t('密钥')}</td>
                   <td>{h.group_name && <span className="tag">{h.group_name}</span>}</td>
+                  <td>{h.expire_at || t('未设置')}</td>
+                  <td>{fmtHostPrice(h.price, h.currency, h.billing_cycle, t) || t('未设置')}</td>
                   <td>{h.remark}</td>
                   <td>
                     <div className="row-actions">

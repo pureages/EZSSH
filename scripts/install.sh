@@ -13,8 +13,7 @@
 #
 # 可配置环境变量:
 #   EZSSH_LANG=en|zh        安装界面语言
-#   EZSSH_SRC=github|gitee  下载源（默认 github；国内可设 gitee）
-#   EZSSH_VERSION=v0.0.4    指定版本（默认 latest release）
+#   EZSSH_VERSION=v0.0.7    指定版本（默认 latest release）
 #   EZSSH_BIN=/path         安装目录（默认 root 时 /usr/local/bin，否则 ~/.local/bin）
 #   EZSSH_WEB=/path/web/dist  前端安装位置（默认 ~/.ezssh/web/dist）
 #
@@ -87,21 +86,11 @@ EXT=""
 [ "$PLATFORM" = "windows" ] && EXT=".exe"
 
 # ---- Resolve source / 下载源 ---------------------------------------------------
-# EZSSH_SRC=github（默认）→ GitHub Releases；gitee → Gitee Releases（国内加速）
+# 统一使用 GitHub Releases
 REPO="pureages/EZSSH"
-SRC="${EZSSH_SRC:-github}"
-case "$SRC" in
-  gitee|Gitee)
-    SRC=gitee
-    API_BASE="https://gitee.com/api/v5/repos/$REPO"
-    DL_BASE="https://gitee.com/$REPO/releases/download"
-    ;;
-  *)
-    SRC=github
-    API_BASE="https://api.github.com/repos/$REPO"
-    DL_BASE="https://github.com/$REPO/releases/download"
-    ;;
-esac
+SRC=github
+API_BASE="https://api.github.com/repos/$REPO"
+DL_BASE="https://github.com/$REPO/releases/download"
 
 # ---- Resolve version / 解析版本 ----------------------------------------------
 VERSION="${EZSSH_VERSION:-}"

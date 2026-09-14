@@ -9,7 +9,7 @@ import (
 )
 
 // appVersion 为 ezssh Agent 版本号。
-const appVersion = "0.0.6-2"
+const appVersion = "0.0.7"
 
 // cmdMenu 交互式管理菜单主循环。
 func cmdMenu(cfg *Config) error {
@@ -260,8 +260,6 @@ func cmdUninstall(cfg *Config, r *bufio.Reader) {
 			removed[self] = true
 		}
 	}
-	// 联动卸载 pi-SSH-Agent（pissh 随 EZSSH 主程序一起卸载）
-	removePissh()
 	// 删除配置与数据目录（仅删除 agent 的 ~/.ezssh 下与 EZSSH 相关文件）
 	if cfg.path != "" {
 		dir := filepath.Dir(cfg.path)
@@ -298,22 +296,6 @@ func cmdOneShot(cfg *Config, sub string) error {
 		return errf("未知子命令: %s", sub)
 	}
 	return nil
-}
-
-// removePissh 卸载 pi-SSH-Agent：删除启动命令、pi 扩展与配置（pissh 随 EZSSH 主程序一起卸载）。
-func removePissh() {
-	home, _ := os.UserHomeDir()
-	targets := []string{
-		"/usr/local/bin/pissh",
-		filepath.Join(home, ".local", "bin", "pissh"),
-		filepath.Join(home, ".pi", "agent", "extensions", "ezssh-agent.ts"),
-		filepath.Join(home, ".pi", "agent", "ezssh-agent.json"),
-	}
-	for _, p := range targets {
-		if err := os.Remove(p); err == nil {
-			pl("已删除 pi-SSH-Agent 相关文件: %s", p)
-		}
-	}
 }
 
 // strVal 取 map 中的字符串值。

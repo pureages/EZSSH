@@ -17,6 +17,14 @@ export interface Host {
   hidden?: boolean
   /** 内置网关主机（默认播种，可删除） */
   builtin?: boolean
+  /** 服务器到期日期（YYYY-MM-DD），''=未设置 */
+  expire_at?: string
+  /** 价格金额（''=未设置） */
+  price?: string
+  /** 价格币种：''|'CNY'|'USD'|'EUR' */
+  currency?: string
+  /** 计费周期：''|'month'|'year'|'3year'|'once' */
+  billing_cycle?: string
 }
 
 export interface HostInput {
@@ -31,6 +39,14 @@ export interface HostInput {
   remark: string
   /** 系统类型：""（自动检测）| "linux" | "windows" */
   platform?: string
+  /** 服务器到期日期（YYYY-MM-DD），''=未设置 */
+  expire_at?: string
+  /** 价格金额（''=未设置） */
+  price?: string
+  /** 价格币种：''|'CNY'|'USD'|'EUR' */
+  currency?: string
+  /** 计费周期：''|'month'|'year'|'3year'|'once' */
+  billing_cycle?: string
 }
 
 export interface InitStatus {

@@ -154,6 +154,14 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadPct, setUploadPct] = useState(0)
   const [uploadBytes, setUploadBytes] = useState('')
+  /** 多文件上传队列进度（单文件时为 null） */
+  const [uploadQueue, setUploadQueue] = useState<{ done: number; total: number } | null>(null)
+  /** 是否有文件正被拖到窗口上方（显示拖拽上传提示层） */
+  const [dragActive, setDragActive] = useState(false)
+  /** 拖拽进入/离开的层数计数：避免子元素切换时提示层闪烁 */
+  const dragDepthRef = useRef(0)
+  /** 文件被拖到的目标文件夹（高亮该行）；null = 无 */
+  const [dropDir, setDropDir] = useState<string | null>(null)
   const [dialog, setDialog] = useState<InputDialogState | null>(null)
   const [dialogValue, setDialogValue] = useState('')
   const [dialogErr, setDialogErr] = useState('')
@@ -218,6 +226,9 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
   const renameCancelRef = useRef(false)
   /** 快速访问右键"重命名"→ 导航到父目录后待命触发的行内重命名目标 */
   const pendingRenameRef = useRef<string | null>(null)
+  /** 快速访问拖拽排序：正在拖动的索引 / 悬停的目标索引（null = 未拖拽） */
+  const [qaDragFrom, setQaDragFrom] = useState<number | null>(null)
+  const [qaDragOver, setQaDragOver] = useState<number | null>(null)
 
   // ---- 排序（Windows 资源管理器风格：点列头切换顺序/倒序）----
   type SortKey = 'name' | 'size' | 'mode' | 'mtime'
@@ -306,6 +317,16 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
     if (hostId && qaLoadedRef.current) {
       void api.quickAccessPut(hostId, normalized.filter((x) => x !== ROOT))
     }
+  }
+
+  /** 快速访问拖拽排序：把第 from 项移动到第 to 项的位置（根目录固定在首位，不可拖动） */
+  const moveQuickAccess = (from: number, to: number) => {
+    const target = Math.max(1, to)
+    if (from < 1 || from === target) return
+    const next = [...quickAccess]
+    const [moved] = next.splice(from, 1)
+    next.splice(target, 0, moved)
+    updateQuickAccess(next)
   }
 
   // 加载主机名与平台映射（用于展示剪贴板来源、跨服务器弹窗提示）
@@ -887,31 +908,59 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
 
   const download = (e: SftpEntry) => downloadPath(join(e.name), e.name, e.is_dir)
 
+  /** 依次上传多个文件到 targetDir（拖拽上传 / 多选上传共用） */
+  const uploadFiles = async (files: File[], targetDir: string) => {
+    if (!hostId || files.length === 0) return
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const targetPath =
+        targetDir === ROOT ? `/${file.name}` : `${targetDir.replace(/\/+$/, '')}/${file.name}`
+      setUploading(file.name)
+      setUploadQueue(files.length > 1 ? { done: i, total: files.length } : null)
+      setUploadPct(0)
+      setUploadBytes(`0 / ${fmtSize(file.size)}`)
+      try {
+        await api.sftpUpload(hostId, targetPath, file, (pct, loaded, total) => {
+          setUploadPct(pct)
+          if (loaded !== undefined)
+            setUploadBytes(`${fmtSize(loaded)} / ${fmtSize(total || file.size)}`)
+        })
+      } catch (err) {
+        setUploading(null)
+        setUploadQueue(null)
+        alert(err instanceof ApiError ? err.message : t('上传失败'))
+        void refresh(cwd)
+        return
+      }
+    }
+    setUploading(null)
+    setUploadQueue(null)
+    void refresh(cwd)
+  }
+
   const onPickFiles = (files: FileList | null) => {
     if (!files || !hostId) return
-    const file = files[0]
-    if (!file) return
     // 右键文件夹"上传"时目标为该文件夹；否则上传到当前目录
     const targetDir = uploadDirRef.current || cwd
     uploadDirRef.current = null
-    const targetPath =
-      targetDir === ROOT ? `/${file.name}` : `${targetDir.replace(/\/+$/, '')}/${file.name}`
-    setUploading(file.name)
-    setUploadPct(0)
-    setUploadBytes(`0 / ${fmtSize(file.size)}`)
-    api
-      .sftpUpload(hostId, targetPath, file, (pct, loaded, total) => {
-        setUploadPct(pct)
-        if (loaded !== undefined) setUploadBytes(`${fmtSize(loaded)} / ${fmtSize(total || file.size)}`)
-      })
-      .then(() => {
-        setUploading(null)
-        void refresh(cwd)
-      })
-      .catch((err: unknown) => {
-        setUploading(null)
-        alert(err instanceof ApiError ? err.message : t('上传失败'))
-      })
+    void uploadFiles(Array.from(files), targetDir)
+  }
+
+  /** 判断拖拽内容是否包含本地文件（用于拖拽上传） */
+  const hasFiles = (e: React.DragEvent) =>
+    !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')
+
+  /** 松开鼠标：把拖入的文件上传到指定目录（默认当前目录） */
+  const onDropFiles = (e: React.DragEvent, targetDir?: string) => {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = 0
+    setDragActive(false)
+    setDropDir(null)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length === 0) return
+    void uploadFiles(files, targetDir || cwd)
   }
 
   /** 复制：把当前选中项记录到全局剪贴板（可跨服务器/跨窗口粘贴） */
@@ -1216,6 +1265,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         background: 'rgba(var(--rgb-appbg),0.85)',
         fontSize: 13,
         outline: 'none',
+        position: 'relative',
       }}
       onClick={() => setCtx(null)}
       onKeyDown={handleKeyDown}
@@ -1225,6 +1275,26 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         if (t.closest('input, textarea, select, .cm-editor, .ctx-menu, .modal-mask')) return
         rootRef.current?.focus()
       }}
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepthRef.current += 1
+        setDragActive(true)
+      }}
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+        if (dragDepthRef.current === 0) {
+          setDragActive(false)
+          setDropDir(null)
+        }
+      }}
+      onDrop={(e) => onDropFiles(e)}
       onContextMenu={(e) => {
         // 空白处右键（避免与行级右键冲突）
         const t = e.target as HTMLElement
@@ -1345,8 +1415,13 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           style={{ display: 'none' }}
-          onChange={(e) => onPickFiles(e.target.files)}
+          onChange={(e) => {
+            onPickFiles(e.target.files)
+            // 允许连续两次选择同一文件：清空值以便重新触发 change
+            e.target.value = ''
+          }}
         />
       </div>
 
@@ -1354,6 +1429,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
       {uploading && (
         <div style={{ padding: '6px 10px', color: 'var(--cyan)', fontSize: 12 }}>
           {t('⬆️ 上传中 {0}', uploading)}
+          {uploadQueue ? t('（{0}/{1}）', uploadQueue.done + 1, uploadQueue.total) : ''}
           {uploadPct >= 0 ? `${uploadPct}%` : ''} {uploadBytes}
           {uploadPct > 0 && (
             <div
@@ -1473,10 +1549,47 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
         >
           <div className="qa-title">{t('⭐ 快速访问')}</div>
           <div className="qa-list">
-            {quickAccess.map((p) => (
+            {quickAccess.map((p, i) => (
               <div
                 key={p}
-                className={`qa-item${cwd === p ? ' active' : ''}`}
+                className={
+                  `qa-item${cwd === p ? ' active' : ''}` +
+                  (qaDragFrom === i ? ' dragging' : '') +
+                  (qaDragOver === i && qaDragFrom !== null && qaDragFrom !== i ? ' drag-over' : '')
+                }
+                draggable={p !== ROOT}
+                onDragStart={(e) => {
+                  // 根目录固定在首位，不允许拖动
+                  if (p === ROOT) {
+                    e.preventDefault()
+                    return
+                  }
+                  setQaDragFrom(i)
+                  e.dataTransfer.effectAllowed = 'move'
+                  try {
+                    e.dataTransfer.setData('text/plain', p)
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (qaDragFrom === null) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (qaDragOver !== i) setQaDragOver(i)
+                }}
+                onDrop={(e) => {
+                  if (qaDragFrom === null) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  moveQuickAccess(qaDragFrom, i)
+                  setQaDragFrom(null)
+                  setQaDragOver(null)
+                }}
+                onDragEnd={() => {
+                  setQaDragFrom(null)
+                  setQaDragOver(null)
+                }}
                 onClick={() => navTo(p)}
                 onContextMenu={(e) => {
                   e.preventDefault()
@@ -1484,7 +1597,7 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                   // 复用文件列表的文件夹菜单，但路径指向该快速访问条目
                   setCtx({ x: e.clientX, y: e.clientY, entry: qaEntry(p), qaPath: p })
                 }}
-                title={p}
+                title={p === ROOT ? p : t('{0}（拖动可调整顺序）', p)}
               >
                 <span style={{ flexShrink: 0 }}>📁</span>
                 <span
@@ -1561,9 +1674,27 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                       if (el) rowElsRef.current.set(e.name, el)
                       else rowElsRef.current.delete(e.name)
                     }}
-                    className={selected.has(e.name) ? 'fm-row sel' : 'fm-row'}
+                    className={
+                      (selected.has(e.name) ? 'fm-row sel' : 'fm-row') +
+                      (dropDir === e.name ? ' drop-target' : '')
+                    }
                     onDoubleClick={() => openEntry(e)}
                     onClick={(ev) => onRowClick(ev, e)}
+                    onDragOver={(ev) => {
+                      // 仅目录行可作为拖拽上传目标
+                      if (!e.is_dir || !hasFiles(ev)) return
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      ev.dataTransfer.dropEffect = 'copy'
+                      if (dropDir !== e.name) setDropDir(e.name)
+                    }}
+                    onDragLeave={() => {
+                      if (e.is_dir && dropDir === e.name) setDropDir(null)
+                    }}
+                    onDrop={(ev) => {
+                      if (!e.is_dir) return
+                      onDropFiles(ev, join(e.name))
+                    }}
                     onContextMenu={(ev) => {
                       ev.preventDefault()
                       ev.stopPropagation()
@@ -1864,22 +1995,20 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
           )}
           {ctx.entry && (
             <>
+              <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
+                {t('🔄 刷新')}
+              </div>
               {ctx.entry.is_dir && (
-                <>
-                  <div className="ctx-menu-item" onClick={() => { refresh(cwd); setCtx(null) }}>
-                    {t('🔄 刷新')}
-                  </div>
-                  <div
-                    className="ctx-menu-item"
-                    onClick={() => {
-                      uploadDirRef.current = join(ctx.entry!.name)
-                      fileInputRef.current?.click()
-                      setCtx(null)
-                    }}
-                  >
-                    {t('⬆️ 上传')}
-                  </div>
-                </>
+                <div
+                  className="ctx-menu-item"
+                  onClick={() => {
+                    uploadDirRef.current = join(ctx.entry!.name)
+                    fileInputRef.current?.click()
+                    setCtx(null)
+                  }}
+                >
+                  {t('⬆️ 上传')}
+                </div>
               )}
               {!ctx.entry.is_dir && (
                 <div
@@ -2328,6 +2457,21 @@ export function FileManagerApp({ hostId, platform }: AppProps) {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 拖拽上传提示层：把文件拖到窗口任意位置即可上传到当前目录 */}
+      {dragActive && (
+        <div className="fm-drop-veil">
+          <div className="fm-drop-box">
+            <div className="fm-drop-icon">⬆️</div>
+            <div className="fm-drop-title">{t('松开鼠标上传文件')}</div>
+            <div className="fm-drop-sub">
+              {dropDir
+                ? t('上传到文件夹「{0}」', dropDir)
+                : t('上传到当前目录：{0}', cwd === ROOT ? rootLabel : cwd)}
             </div>
           </div>
         </div>

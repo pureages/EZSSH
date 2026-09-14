@@ -105,10 +105,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/hosts/{id}/status", s.requireAuth(s.handleHostStatus))
 	mux.HandleFunc("POST /api/hosts/{id}/exec", s.requireAuth(s.handleHostExec))
 
-	// pi-SSH-Agent（pissh）：网关本机 agent 进程通过 X-Agent-Token 调用主机执行能力
-	mux.HandleFunc("POST /api/agent/token", s.requireAuth(s.handleAgentToken))
-	mux.HandleFunc("GET /api/agent/hosts", s.requireAgent(s.handleAgentHosts))
-	mux.HandleFunc("POST /api/agent/exec", s.requireAgent(s.handleAgentExec))
 	mux.HandleFunc("POST /api/test-connect", s.requireAuth(s.handleTestConnect))
 	mux.HandleFunc("GET /api/geo", s.requireAuth(s.handleGeo))
 

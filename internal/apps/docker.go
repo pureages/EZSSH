@@ -255,6 +255,9 @@ type CreateSpec struct {
 	// /opt/<name>/ 下，并以只读卷挂载到 ConfigPath。用于绕过那些无视环境变量的镜像。
 	ConfigFile string `json:"configFile"`
 	ConfigPath string `json:"configPath"` // 配置在容器内的挂载路径，如 /etc/frp/frps.toml
+	// RawCommand 用户直接粘贴的完整 docker run 命令（「自定义安装（docker run）」）。
+	// 非空时优先于其他字段，整条命令原样执行（用户即管理员，等价于在终端粘贴）。
+	RawCommand string `json:"rawCommand"`
 }
 
 // runStrict 在目标机执行命令，命令失败（非零退出码）时返回错误并带上输出。
@@ -442,8 +445,32 @@ func (m *DockerManager) prepareConfig(hostID string, spec CreateSpec) (CreateSpe
 
 var containerNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 
+// dockerRunPrefixRe 校验粘贴的命令确实是一条 docker run（允许 sudo 前缀）。
+var dockerRunPrefixRe = regexp.MustCompile(`^(?:sudo\s+)?docker\s+run(?:\s|$)`)
+
+// normalizeDockerRun 归一化用户粘贴的 docker run 命令：
+//   - 把 shell 续行符「\ + 换行」合并为空格（支持从文档里多行复制的命令）；
+//   - 合并后仍存在换行/回车 → 视为多条命令，拒绝（防止误粘贴脚本）；
+//   - 必须以 docker run 开头。
+func normalizeDockerRun(raw string) (string, error) {
+	s := strings.ReplaceAll(raw, "\\\r\n", " ")
+	s = strings.ReplaceAll(s, "\\\n", " ")
+	s = strings.TrimSpace(s)
+	if strings.ContainsAny(s, "\r\n") {
+		return "", fmt.Errorf("只支持单条 docker run 命令（不支持多行/多条命令）")
+	}
+	if !dockerRunPrefixRe.MatchString(s) {
+		return "", fmt.Errorf("命令必须以 docker run 开头")
+	}
+	return s, nil
+}
+
 // buildRunCommand 按 spec 构建 docker run 命令。所有用户输入均做 shell 转义，防止注入。
+// spec.RawCommand 非空时直接使用用户粘贴的命令。
 func (m *DockerManager) buildRunCommand(spec CreateSpec) (string, error) {
+	if raw := strings.TrimSpace(spec.RawCommand); raw != "" {
+		return normalizeDockerRun(raw)
+	}
 	if strings.TrimSpace(spec.Image) == "" {
 		return "", fmt.Errorf("镜像不能为空")
 	}
@@ -569,10 +596,10 @@ func (m *DockerManager) Inspect(hostID, id string) (ContainerDetails, error) {
 	}
 	r0 := arr[0]
 	d := ContainerDetails{
-		ID:      r0.ID,
-		Name:    strings.TrimPrefix(r0.Name, "/"),
-		Image:   r0.Config.Image,
-		State:   r0.State.Status,
+		ID:    r0.ID,
+		Name:  strings.TrimPrefix(r0.Name, "/"),
+		Image: r0.Config.Image,
+		State: r0.State.Status,
 		// 初始化为空切片而非 nil，避免 JSON 序列化输出 null 导致前端读 length 崩溃
 		Env:     []string{},
 		Ports:   []string{},

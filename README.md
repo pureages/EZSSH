@@ -2,13 +2,11 @@
 
 > [English](README.en.md) | 简体中文
 
-版本：v0.0.6-2
+版本：v0.0.7
 
 **原生 SSH / SFTP 驱动的轻量干净、可视化的服务器 / VPS 自托管中心化 Web 网关，GO 驱动**，被控服务器无需任何 Agent，安全可控。
 
 如果你想要更详细的内容请查看[用户手册](doc/user-guide.md)
-
-安卓APK已推出，可访问：https://github.com/pureages/EZSSH-app
 
 ## 预览
 
@@ -27,7 +25,7 @@
 3. **Docker 管理**：可视化统一管理 Docker。
 4. **服务器监控**：实时监控服务器状态，内置任务管理器。
 5. **一键命令**：常用命令一键执行，站点统一管理。
-6. **Pi-Agent管理**：基于[pi](https://github.com/earendil-works/pi)的agent，可以AI管理服务器。
+6. **服务器卡片视图**：服务器以卡片形式直观展示，并支持设置到期时间与到期提醒。
 
 ## 快速开始
 
@@ -39,14 +37,6 @@
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/pureages/EZSSH/main/scripts/install.sh)
-```
-
-**或**
-
-**国内加速-安装脚本**（Gitee 源）：
-
-```bash
-EZSSH_SRC=gitee bash <(curl -fsSL https://gitee.com/pureages/EZSSH/raw/main/scripts/install.sh)
 ```
 
 ### 2. Docker 部署

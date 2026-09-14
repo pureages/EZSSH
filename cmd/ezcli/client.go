@@ -157,7 +157,7 @@ func (c *Client) ChangePassword(oldPwd, newPwd string) error {
 	return err
 }
 
-// UpdateCheck 检查 GitHub/Gitee 最新 Release 版本（需登录）。
+// UpdateCheck 检查 GitHub 最新 Release 版本（需登录）。
 func (c *Client) UpdateCheck() (map[string]any, error) {
 	if err := c.Login(); err != nil {
 		return nil, err
