@@ -2,6 +2,7 @@ name: docker
 
 # 推送 v* 标签时构建多架构 Docker 镜像并推送到 Docker Hub
 # 用法: git tag v0.0.7-2 && git push origin v0.0.7-2
+# 补发/重推: Actions → docker → Run workflow（填写 version），无需移动 tag
 #
 # 需要先配置 GitHub Secrets:
 #   DOCKERHUB_USERNAME   Docker Hub 用户名
@@ -10,6 +11,13 @@ on:
   push:
     tags:
       - 'v*'
+  # 手动补发：用于构建失败/挂起后重推镜像，取当前分支（main）的 workflow
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '镜像版本号（如 0.0.7-2）；留空则取分支名'
+        required: false
+        default: ''
 
 env:
   IMAGE: pureages/ezssh
@@ -17,6 +25,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 历史上正常耗时 9~11 分钟；设上限避免（如镜像推送/缓存导出）挂起时干等到默认 360 分钟
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -36,7 +46,13 @@ jobs:
 
       - name: Compute version
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          # 手动触发时用输入的 version；tag 触发时取 v 前缀后的版本号
+          VER="${{ github.event.inputs.version }}"
+          if [ -z "$VER" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
 
       - name: Build and push (amd64 + arm64)
         uses: docker/build-push-action@v6
@@ -48,7 +64,8 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE }}:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # mode=max 会导出所有中间层，曾在 GHA 缓存上长时间挂起；mode=min 只导出最终镜像层
+          cache-to: type=gha,mode=min
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
