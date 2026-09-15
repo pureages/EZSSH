@@ -10,8 +10,8 @@ type certResolver interface {
 
 // CertDirNameCandidates 返回该域名可能使用的证书目录名，按优先级排列：
 //
-//	1. 域名本身（精确匹配，也是多域名 SAN 证书的主域名目录）
-//	2. 上一级泛域名（*.parent）：TLS 泛域名只覆盖一级，www.wyj.me → *.wyj.me
+//  1. 域名本身（精确匹配，也是多域名 SAN 证书的主域名目录）
+//  2. 上一级泛域名（*.parent）：TLS 泛域名只覆盖一级，www.wyj.me → *.wyj.me
 //
 // 例：www.wyj.me → ["www.wyj.me", "*.wyj.me"]；wyj.me → ["wyj.me"]。
 func CertDirNameCandidates(domain string) []string {
